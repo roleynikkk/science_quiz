@@ -412,7 +412,7 @@ async function handleTaskSubmit(e) {
     closeModal('taskModal');
 }
 
-// Управление задачами
+// Управление задачами - ИСПРАВЛЕННАЯ ГЕНЕРАЦИЯ HTML
 function updateTasksList() {
     if (!currentGameForTasks) return;
 
@@ -427,14 +427,13 @@ function updateTasksList() {
     document.getElementById('tasksProgress').style.width = progress + '%';
     document.getElementById('tasksProgressText').textContent = progress + '%';
 
-    // Обновляем список задач
+    // Обновляем список задач - ПРАВИЛЬНАЯ СТРУКТУРА HTML
     const tasksList = document.getElementById('gameTasksList');
     tasksList.innerHTML = tasks.map(task => `
         <div class="task-item">
             <label class="task-checkbox">
                 <input type="checkbox" ${task.completed ? 'checked' : ''} 
                        onchange="toggleTask('${game.id}', '${task.id}')">
-                <span class="checkmark"></span>
                 <span class="task-text ${task.completed ? 'completed' : ''}">${task.name}</span>
             </label>
             <button class="btn-icon danger" onclick="removeTask('${game.id}', '${task.id}')" title="Удалить">
@@ -470,7 +469,7 @@ async function removeTask(gameId, taskId) {
     updateTasksList();
 }
 
-// Шаблоны задач
+// Шаблоны задач - ИСПРАВЛЕННАЯ ГЕНЕРАЦИЯ HTML
 function updateTemplateTasks() {
     const container = document.getElementById('templateTasksList');
     container.innerHTML = templateTasks.map((task, index) => `
