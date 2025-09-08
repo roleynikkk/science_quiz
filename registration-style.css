@@ -50,15 +50,14 @@ body {
     margin-bottom: 16px;
 }
 
-/* ОБНОВЛЕННЫЕ стили для логотипа */
+/* ИСПРАВЛЕННЫЕ стили для логотипа - крупный, без светлого фона */
 .logo-icon {
-    width: 48px;
-    height: 48px;
-    object-fit: contain;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.1);
-    padding: 4px;
-    backdrop-filter: blur(10px);
+    width: 64px;              /* увеличен с 48px */
+    height: 64px;             /* увеличен с 48px */
+    object-fit: cover;        /* заполняет всю площадь */
+    border-radius: 12px;      /* увеличено скругление */
+    background: transparent;  /* убран светлый фон */
+    padding: 0;               /* убраны отступы */
 }
 
 .header h1 {
@@ -342,9 +341,14 @@ body {
         gap: 12px;
     }
 
+    /* ИСПРАВЛЕННЫЙ логотип для мобильных - тоже без фона */
     .logo-icon {
-        width: 40px;
-        height: 40px;
+        width: 56px;              /* увеличен с 40px */
+        height: 56px;             /* увеличен с 40px */
+        object-fit: cover;        /* заполняет всю площадь */
+        border-radius: 10px;      /* скругление */
+        background: transparent;  /* убран светлый фон */
+        padding: 0;               /* убраны отступы */
     }
 
     .registration-form,
