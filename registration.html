@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Регистрация команды - ScienceQuiz</title>
+    <link rel="stylesheet" href="registration-style.css">
+</head>
+<body>
+    <div class="registration-container">
+        <div class="registration-card">
+            <!-- Заголовок -->
+            <div class="header">
+                <div class="logo">
+                    <span class="logo-icon">🧠</span>
+                    <h1>ScienceQuiz</h1>
+                </div>
+                <p class="subtitle">Регистрация команды на интеллектуальную игру</p>
+            </div>
+
+            <!-- Форма регистрации -->
+            <form class="registration-form" id="registrationForm">
+                <div class="form-group">
+                    <label for="gameSelect">Выберите игру*</label>
+                    <select id="gameSelect" required>
+                        <option value="">Загрузка игр...</option>
+                    </select>
+                    <div class="game-info" id="gameInfo">
+                        <!-- Здесь будет информация о выбранной игре -->
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="teamName">Название команды*</label>
+                    <input type="text" id="teamName" required 
+                           placeholder="Например: Команда Альфа" 
+                           maxlength="50">
+                </div>
+
+                <div class="form-group">
+                    <label for="memberCount">Количество участников*</label>
+                    <input type="number" id="memberCount" required 
+                           min="1" max="8" placeholder="5">
+                </div>
+
+                <div class="form-group">
+                    <label for="captainContact">Контакт капитана команды*</label>
+                    <input type="url" id="captainContact" required
+                           placeholder="https://vk.com/captain или https://t.me/captain">
+                    <small class="form-hint">VK, Telegram, Instagram или другая соц. сеть</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="captainName">Имя капитана (необязательно)</label>
+                    <input type="text" id="captainName" 
+                           placeholder="Иван Иванов" 
+                           maxlength="100">
+                </div>
+
+                <button type="submit" class="submit-btn" id="submitBtn">
+                    <span class="btn-icon">✅</span>
+                    Зарегистрировать команду
+                </button>
+            </form>
+
+            <!-- Сообщение об успехе -->
+            <div class="success-message" id="successMessage">
+                <div class="success-icon">🎉</div>
+                <h3>Команда успешно зарегистрирована!</h3>
+                <p>Ваша команда добавлена в список участников игры.</p>
+                <button class="btn-secondary" onclick="resetForm()">Зарегистрировать еще одну команду</button>
+            </div>
+        </div>
+
+        <!-- Информация -->
+        <div class="info-section">
+            <div class="info-card">
+                <h3>📝 Как зарегистрироваться?</h3>
+                <ol>
+                    <li>Выберите игру из списка</li>
+                    <li>Укажите название вашей команды</li>
+                    <li>Введите количество участников</li>
+                    <li>Добавьте ссылку на ваш профиль в соц. сети</li>
+                    <li>Нажмите "Зарегистрировать команду"</li>
+                </ol>
+            </div>
+
+            <div class="info-card">
+                <h3>ℹ️ Важная информация</h3>
+                <ul>
+                    <li>Регистрация бесплатная</li>
+                    <li>Максимум 8 участников в команде</li>
+                    <li>Обязательно укажите контакт капитана</li>
+                    <li>После регистрации с вами свяжутся организаторы</li>
+                </ul>
+            </div>
+
+            <div class="info-card">
+                <h3>📞 Вопросы?</h3>
+                <p>Если у вас есть вопросы о регистрации или проведении игры, обратитесь к <a href="https://t.me/mariyasidor17">организаторам</a>.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Уведомления -->
+    <div class="notification" id="notification">
+        <div class="notification-content">
+            <span id="notificationText"></span>
+            <button class="notification-close" onclick="closeNotification()">&times;</button>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js';
+        import { getFirestore } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js';
+
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAH3wUx1u70JILfIvBS0eYCEDsZ9npS3X4",
+            authDomain: "scincequiz-73bda.firebaseapp.com",
+            projectId: "scincequiz-73bda",
+            storageBucket: "scincequiz-73bda.firebasestorage.app",
+            messagingSenderId: "440858666248",
+            appId: "1:440858666248:web:422efcc7ee6f79dd7938bd"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Make db available globally
+        window.db = db;
+    </script>
+
+    <script src="registration.js" type="module"></script>
+</body>
+</html>
