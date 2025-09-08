@@ -3,10 +3,7 @@ import {
     collection, 
     getDocs, 
     updateDoc, 
-    doc, 
-    query,
-    orderBy,
-    where
+    doc
 } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js';
 
 // Глобальные переменные
@@ -24,52 +21,86 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Firebase не инициализирован');
             showNotification('Ошибка соединения с сервером', 'error');
         }
-    }, 1000);
+    }, 2000);
 });
 
 async function initializeRegistration() {
     try {
+        console.log('Начинаем инициализацию регистрации...');
         await loadAvailableGames();
         setupEventListeners();
     } catch (error) {
         console.error('Ошибка инициализации:', error);
-        showNotification('Ошибка загрузки данных', 'error');
+        showNotification('Ошибка загрузки данных: ' + error.message, 'error');
     }
 }
 
-// Загрузка доступных игр
+// МАКСИМАЛЬНО УПРОЩЕННАЯ загрузка игр (БЕЗ ФИЛЬТРОВ И СОРТИРОВКИ)
 async function loadAvailableGames() {
     try {
-        const gamesRef = collection(window.db, 'games');
-        const q = query(gamesRef, 
-            where('status', 'in', ['Планируется', 'В процессе']),
-            orderBy('date', 'asc')
-        );
+        console.log('Загружаем игры из Firebase...');
 
-        const snapshot = await getDocs(q);
+        // ПРОСТЕЙШИЙ запрос - получаем все документы из коллекции games
+        const gamesRef = collection(window.db, 'games');
+        const snapshot = await getDocs(gamesRef);
+
+        console.log('Получено документов из Firebase:', snapshot.size);
+
         games = [];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
         snapshot.forEach((doc) => {
             const gameData = doc.data();
-            // Проверяем, что игра не в прошлом
-            const gameDate = new Date(gameData.date);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
+            console.log('Обрабатываем игру:', gameData.name || 'Без названия', 'статус:', gameData.status || 'Без статуса');
 
-            if (gameDate >= today) {
-                games.push({
-                    id: doc.id,
-                    ...gameData
-                });
+            // Простая фильтрация НА КЛИЕНТЕ (не в запросе к Firebase)
+            if (gameData.name && gameData.date && gameData.status) {
+                // Проверяем статус
+                if (gameData.status === 'Планируется' || gameData.status === 'В процессе') {
+                    // Проверяем дату
+                    const gameDate = new Date(gameData.date);
+                    if (gameDate >= today) {
+                        games.push({
+                            id: doc.id,
+                            ...gameData
+                        });
+                        console.log('Игра добавлена в список:', gameData.name);
+                    } else {
+                        console.log('Игра пропущена (дата в прошлом):', gameData.name, gameData.date);
+                    }
+                } else {
+                    console.log('Игра пропущена (неподходящий статус):', gameData.name, gameData.status);
+                }
+            } else {
+                console.log('Игра пропущена (нет обязательных полей):', gameData);
             }
         });
 
-        console.log('Загружено игр для регистрации:', games.length);
+        console.log('Итого загружено игр для регистрации:', games.length);
+
+        // Сортируем на клиенте
+        games.sort((a, b) => new Date(a.date) - new Date(b.date));
+
         populateGamesSelect();
 
     } catch (error) {
         console.error('Ошибка загрузки игр:', error);
-        showNotification('Ошибка загрузки списка игр', 'error');
+        console.error('Код ошибки:', error.code);
+        console.error('Сообщение ошибки:', error.message);
+
+        if (error.code === 'permission-denied') {
+            showNotification('Нет доступа к данным. Проверьте настройки Firebase.', 'error');
+        } else if (error.code === 'failed-precondition') {
+            showNotification('Ошибка настройки базы данных. Обратитесь к администратору.', 'error');
+        } else {
+            showNotification('Ошибка загрузки игр. Попробуйте позже.', 'error');
+        }
+
+        // Показываем пустой селект с сообщением об ошибке
+        const gameSelect = document.getElementById('gameSelect');
+        gameSelect.innerHTML = '<option value="">Ошибка загрузки игр</option>';
+        gameSelect.disabled = true;
     }
 }
 
@@ -77,9 +108,12 @@ async function loadAvailableGames() {
 function populateGamesSelect() {
     const gameSelect = document.getElementById('gameSelect');
 
+    console.log('Заполняем селект игр, доступно игр:', games.length);
+
     if (games.length === 0) {
         gameSelect.innerHTML = '<option value="">Нет доступных игр для регистрации</option>';
         gameSelect.disabled = true;
+        console.log('Нет игр для отображения');
         return;
     }
 
@@ -90,13 +124,17 @@ function populateGamesSelect() {
         option.value = game.id;
         option.textContent = `${game.name} - ${formatDate(game.date)} в ${game.time}`;
         gameSelect.appendChild(option);
+        console.log('Добавлена опция в селект:', option.textContent);
     });
 
     gameSelect.disabled = false;
+    console.log('Селект игр успешно заполнен');
 }
 
 // Обработчики событий
 function setupEventListeners() {
+    console.log('Настраиваем обработчики событий...');
+
     // Выбор игры
     document.getElementById('gameSelect').addEventListener('change', handleGameSelect);
 
@@ -105,15 +143,20 @@ function setupEventListeners() {
 
     // Валидация полей
     setupFieldValidation();
+
+    console.log('Обработчики событий настроены');
 }
 
 function handleGameSelect(e) {
     const gameId = e.target.value;
     const gameInfo = document.getElementById('gameInfo');
 
+    console.log('Выбрана игра с ID:', gameId);
+
     if (gameId) {
         selectedGame = games.find(g => g.id === gameId);
         if (selectedGame) {
+            console.log('Найдена информация об игре:', selectedGame.name);
             showGameInfo(selectedGame);
             gameInfo.classList.add('visible');
         }
@@ -231,7 +274,10 @@ function clearFieldError(field) {
 async function handleFormSubmit(e) {
     e.preventDefault();
 
+    console.log('Начинаем регистрацию команды...');
+
     if (!validateForm()) {
+        console.log('Форма не прошла валидацию');
         return;
     }
 
@@ -241,11 +287,12 @@ async function handleFormSubmit(e) {
 
     try {
         await registerTeam();
+        console.log('Команда успешно зарегистрирована');
         showSuccessMessage();
 
     } catch (error) {
         console.error('Ошибка регистрации команды:', error);
-        showNotification('Ошибка при регистрации команды. Попробуйте еще раз.', 'error');
+        showNotification('Ошибка при регистрации команды: ' + error.message, 'error');
 
     } finally {
         submitBtn.disabled = false;
@@ -263,6 +310,8 @@ function validateForm() {
 }
 
 async function registerTeam() {
+    console.log('Регистрируем команду для игры:', selectedGame.name);
+
     const teamData = {
         id: generateId(),
         number: (selectedGame.teams ? selectedGame.teams.length : 0) + 1,
@@ -274,13 +323,16 @@ async function registerTeam() {
         registrationSource: 'public_form'
     };
 
+    console.log('Данные новой команды:', teamData);
+
     // Обновляем список команд игры
     const updatedTeams = [...(selectedGame.teams || []), teamData];
 
+    console.log('Обновляем игру в Firebase...');
     const gameRef = doc(window.db, 'games', selectedGame.id);
     await updateDoc(gameRef, { teams: updatedTeams });
 
-    console.log('Команда зарегистрирована:', teamData.name);
+    console.log('Команда успешно добавлена в Firebase');
 }
 
 function showSuccessMessage() {
@@ -289,6 +341,7 @@ function showSuccessMessage() {
 }
 
 function resetForm() {
+    console.log('Сброс формы для новой регистрации');
     document.getElementById('successMessage').classList.remove('visible');
     document.getElementById('registrationForm').classList.remove('hidden');
     document.getElementById('registrationForm').reset();
@@ -304,6 +357,8 @@ function resetForm() {
 
 // Уведомления
 function showNotification(message, type = 'success') {
+    console.log('Показываем уведомление:', type, '-', message);
+
     const notification = document.getElementById('notification');
     const text = document.getElementById('notificationText');
 
@@ -338,4 +393,4 @@ function generateId() {
 window.resetForm = resetForm;
 window.closeNotification = closeNotification;
 
-console.log('registration.js загружен');
+console.log('registration.js (упрощенная версия) загружен и готов к работе');
