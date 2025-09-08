@@ -225,7 +225,7 @@ function updateGamesTable() {
                 <td>${formatDate(game.date)}</td>
                 <td>${game.time}</td>
                 <td>${game.venue}</td>
-                <td><span class="status status-${game.status.toLowerCase()}">${game.status}</span></td>
+                <td><span class="status status-${game.status.toLowerCase().replace(' ', '.')}">${game.status}</span></td>
                 <td>
                     <div class="progress-container">
                         <div class="progress-bar">
