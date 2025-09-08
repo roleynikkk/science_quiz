@@ -8,8 +8,7 @@ import {
     doc, 
     onSnapshot,
     query,
-    orderBy,
-    where
+    orderBy
 } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js';
 
 // Глобальные переменные
@@ -28,11 +27,67 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('Firebase инициализирован, запускаем приложение');
             initializeApp();
             setupEventListeners();
+            setupMobileMenu(); // НОВОЕ: Настройка мобильного меню
         } else {
             console.error('Firebase не инициализирован');
         }
     }, 1000);
 });
+
+// НОВАЯ ФУНКЦИЯ: Настройка мобильного меню
+function setupMobileMenu() {
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const sidebar = document.getElementById('sidebar');
+    const mobileOverlay = document.getElementById('mobileOverlay');
+    const sidebarClose = document.getElementById('sidebarClose');
+
+    // Функция открытия меню
+    function openMobileMenu() {
+        sidebar.classList.add('open');
+        mobileOverlay.style.display = 'block';
+        setTimeout(() => mobileOverlay.classList.add('active'), 10);
+        document.body.style.overflow = 'hidden'; // Блокируем скролл
+    }
+
+    // Функция закрытия меню
+    function closeMobileMenu() {
+        sidebar.classList.remove('open');
+        mobileOverlay.classList.remove('active');
+        setTimeout(() => {
+            mobileOverlay.style.display = 'none';
+            document.body.style.overflow = 'auto'; // Разблокируем скролл
+        }, 300);
+    }
+
+    // Обработчики событий
+    if (mobileMenuBtn) {
+        mobileMenuBtn.addEventListener('click', openMobileMenu);
+    }
+
+    if (sidebarClose) {
+        sidebarClose.addEventListener('click', closeMobileMenu);
+    }
+
+    if (mobileOverlay) {
+        mobileOverlay.addEventListener('click', closeMobileMenu);
+    }
+
+    // Закрытие меню при выборе пункта навигации на мобильных
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', () => {
+            if (window.innerWidth <= 768) {
+                setTimeout(closeMobileMenu, 100); // Небольшая задержка для плавности
+            }
+        });
+    });
+
+    // Закрытие меню при изменении размера экрана
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 768) {
+            closeMobileMenu();
+        }
+    });
+}
 
 function initializeApp() {
     // Настраиваем реалтайм-слушатель для игр
@@ -221,7 +276,7 @@ function updateUpcomingGamesList() {
     }).join('');
 }
 
-// ИСПРАВЛЕННАЯ функция обновления таблицы игр С ЧЕТКОЙ КНОПКОЙ КОМАНД
+// ИСПРАВЛЕННАЯ функция обновления таблицы игр С МОБИЛЬНОЙ АДАПТАЦИЕЙ
 function updateGamesTable() {
     console.log('Обновляем таблицу игр, всего игр:', games.length);
 
@@ -251,19 +306,25 @@ function updateGamesTable() {
         return;
     }
 
-    // ИСПРАВЛЕННАЯ генерация HTML с ясно видимой кнопкой команд
+    // УЛУЧШЕННАЯ генерация HTML с мобильной адаптацией
     tbody.innerHTML = filteredGames.map(game => {
         const progress = calculateProgress(game);
         const statusClass = game.status.toLowerCase().replace(' ', '.');
 
         return `
             <tr>
-                <td>${game.name}</td>
-                <td>${formatDate(game.date)}</td>
-                <td>${game.time}</td>
-                <td>${game.venue}</td>
-                <td><span class="status status-${statusClass}">${game.status}</span></td>
                 <td>
+                    <div style="font-weight: 500;">${game.name}</div>
+                    <div class="hide-desktop" style="font-size: 12px; color: #6b6866; margin-top: 4px;">
+                        📅 ${formatDate(game.date)} ${game.time}<br>
+                        📍 ${game.venue}
+                    </div>
+                </td>
+                <td class="hide-mobile">${formatDate(game.date)}</td>
+                <td class="hide-mobile">${game.time}</td>
+                <td class="hide-mobile">${game.venue}</td>
+                <td><span class="status status-${statusClass}">${game.status}</span></td>
+                <td class="hide-mobile">
                     <div class="progress-container">
                         <div class="progress-bar">
                             <div class="progress-fill" style="width: ${progress}%"></div>
@@ -294,6 +355,9 @@ function updateGamesTable() {
 
     console.log('Таблица игр обновлена, строк:', filteredGames.length);
 }
+
+// Остальные функции остаются без изменений...
+// [Здесь все остальные функции из оригинального app.js]
 
 // Firebase функции для игр
 async function addGame(gameData) {
@@ -619,9 +683,15 @@ function updateTeamsList() {
     teamsTableBody.innerHTML = teams.map(team => `
         <tr>
             <td><span class="team-number">${team.number}</span></td>
-            <td><span class="team-name">${team.name}</span></td>
-            <td><span class="team-count">${team.memberCount}</span></td>
             <td>
+                <span class="team-name">${team.name}</span>
+                <div class="hide-desktop" style="font-size: 12px; color: #6b6866; margin-top: 4px;">
+                    👥 ${team.memberCount} чел.
+                    ${team.captainSocialLink ? '<br>🔗 Есть контакт' : '<br>📝 Нет контакта'}
+                </div>
+            </td>
+            <td class="hide-mobile"><span class="team-count">${team.memberCount}</span></td>
+            <td class="hide-mobile">
                 ${team.captainSocialLink ? 
                     `<a href="${team.captainSocialLink}" target="_blank" class="captain-link">Перейти</a>` : 
                     '<span class="captain-none">Не указано</span>'
@@ -810,5 +880,4 @@ window.removeTemplateTask = removeTemplateTask;
 window.editTeam = editTeam;
 window.removeTeam = removeTeam;
 
-// Добавляем логирование для отладки
-console.log('app.js загружен, все функции определены');
+console.log('📱 Мобильно-оптимизированный планер ScienceQuiz загружен');
