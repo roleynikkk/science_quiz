@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Ждем пока Firebase инициализируется
     setTimeout(() => {
         if (window.db) {
+            console.log('Firebase инициализирован, запускаем приложение');
             initializeApp();
             setupEventListeners();
         } else {
@@ -62,6 +63,8 @@ function setupRealtimeListeners() {
             });
         });
 
+        console.log('Игры загружены:', games.length);
+
         // Обновляем интерфейс
         updateDashboard();
         updateGamesTable();
@@ -94,14 +97,21 @@ function setupEventListeners() {
     });
 
     // НОВЫЕ обработчики для команд
-    document.getElementById('addTeamBtn').addEventListener('click', () => {
-        openTeamModal();
-    });
+    const addTeamBtn = document.getElementById('addTeamBtn');
+    if (addTeamBtn) {
+        addTeamBtn.addEventListener('click', () => {
+            openTeamModal();
+        });
+    }
 
     // Формы
     document.getElementById('gameForm').addEventListener('submit', handleGameSubmit);
     document.getElementById('taskForm').addEventListener('submit', handleTaskSubmit);
-    document.getElementById('teamForm').addEventListener('submit', handleTeamSubmit);
+
+    const teamForm = document.getElementById('teamForm');
+    if (teamForm) {
+        teamForm.addEventListener('submit', handleTeamSubmit);
+    }
 
     // Фильтры и поиск
     document.getElementById('statusFilter').addEventListener('change', filterGames);
@@ -140,9 +150,12 @@ function setupModalListeners() {
     });
 
     // Закрытие уведомлений
-    document.querySelector('.notification-close').addEventListener('click', () => {
-        document.getElementById('notification').style.display = 'none';
-    });
+    const notificationClose = document.querySelector('.notification-close');
+    if (notificationClose) {
+        notificationClose.addEventListener('click', () => {
+            document.getElementById('notification').style.display = 'none';
+        });
+    }
 }
 
 // Навигация между секциями
@@ -208,9 +221,16 @@ function updateUpcomingGamesList() {
     }).join('');
 }
 
-// Обновление таблицы игр С НОВОЙ КНОПКОЙ КОМАНД
+// ИСПРАВЛЕННАЯ функция обновления таблицы игр С ЧЕТКОЙ КНОПКОЙ КОМАНД
 function updateGamesTable() {
+    console.log('Обновляем таблицу игр, всего игр:', games.length);
+
     const tbody = document.getElementById('gamesTableBody');
+    if (!tbody) {
+        console.error('Не найден элемент gamesTableBody');
+        return;
+    }
+
     const statusFilter = document.getElementById('statusFilter').value;
     const searchQuery = document.getElementById('searchInput').value.toLowerCase();
 
@@ -231,15 +251,18 @@ function updateGamesTable() {
         return;
     }
 
+    // ИСПРАВЛЕННАЯ генерация HTML с ясно видимой кнопкой команд
     tbody.innerHTML = filteredGames.map(game => {
         const progress = calculateProgress(game);
+        const statusClass = game.status.toLowerCase().replace(' ', '.');
+
         return `
             <tr>
                 <td>${game.name}</td>
                 <td>${formatDate(game.date)}</td>
                 <td>${game.time}</td>
                 <td>${game.venue}</td>
-                <td><span class="status status-${game.status.toLowerCase().replace(' ', '.')}">${game.status}</span></td>
+                <td><span class="status status-${statusClass}">${game.status}</span></td>
                 <td>
                     <div class="progress-container">
                         <div class="progress-bar">
@@ -249,25 +272,27 @@ function updateGamesTable() {
                     </div>
                 </td>
                 <td class="actions">
-                    <button class="btn-icon" onclick="openTasksModal('${game.id}')" title="Задачи">
+                    <button class="btn-icon" onclick="window.openTasksModal('${game.id}')" title="Задачи">
                         ✓
                     </button>
-                    <button class="btn-icon" onclick="openTeamsModal('${game.id}')" title="Команды">
+                    <button class="btn-icon" onclick="window.openTeamsModal('${game.id}')" title="Команды">
                         👥
                     </button>
-                    <button class="btn-icon" onclick="editGame('${game.id}')" title="Редактировать">
+                    <button class="btn-icon" onclick="window.editGame('${game.id}')" title="Редактировать">
                         ✏️
                     </button>
-                    <button class="btn-icon" onclick="duplicateGame('${game.id}')" title="Дублировать">
+                    <button class="btn-icon" onclick="window.duplicateGame('${game.id}')" title="Дублировать">
                         📋
                     </button>
-                    <button class="btn-icon danger" onclick="deleteGame('${game.id}')" title="Удалить">
+                    <button class="btn-icon danger" onclick="window.deleteGame('${game.id}')" title="Удалить">
                         🗑️
                     </button>
                 </td>
             </tr>
         `;
     }).join('');
+
+    console.log('Таблица игр обновлена, строк:', filteredGames.length);
 }
 
 // Firebase функции для игр
@@ -374,9 +399,13 @@ function openGameModal(gameId = null) {
 }
 
 function openTasksModal(gameId) {
+    console.log('Открываем модальное окно задач для игры:', gameId);
     currentGameForTasks = gameId;
     const game = games.find(g => g.id === gameId);
-    if (!game) return;
+    if (!game) {
+        console.error('Игра не найдена:', gameId);
+        return;
+    }
 
     document.getElementById('tasksModalTitle').textContent = `Задачи для игры: ${game.name}`;
     updateTasksList();
@@ -386,10 +415,14 @@ function openTasksModal(gameId) {
 
 // НОВАЯ ФУНКЦИЯ: Модальное окно команд
 function openTeamsModal(gameId) {
+    console.log('Открываем модальное окно команд для игры:', gameId);
     currentGameForTeams = gameId;
     currentEditingTeamId = null;
     const game = games.find(g => g.id === gameId);
-    if (!game) return;
+    if (!game) {
+        console.error('Игра не найдена:', gameId);
+        return;
+    }
 
     document.getElementById('teamsModalTitle').textContent = `Команды участников: ${game.name}`;
     updateTeamsList();
@@ -549,10 +582,10 @@ function updateTasksList() {
         <div class="task-item">
             <label class="task-checkbox">
                 <input type="checkbox" ${task.completed ? 'checked' : ''} 
-                       onchange="toggleTask('${game.id}', '${task.id}')">
+                       onchange="window.toggleTask('${game.id}', '${task.id}')">
                 <span class="task-text ${task.completed ? 'completed' : ''}">${task.name}</span>
             </label>
-            <button class="btn-icon danger" onclick="removeTask('${game.id}', '${task.id}')" title="Удалить">
+            <button class="btn-icon danger" onclick="window.removeTask('${game.id}', '${task.id}')" title="Удалить">
                 🗑️
             </button>
         </div>
@@ -595,10 +628,10 @@ function updateTeamsList() {
                 }
             </td>
             <td class="team-actions">
-                <button class="btn-icon" onclick="editTeam('${team.id}')" title="Редактировать">
+                <button class="btn-icon" onclick="window.editTeam('${team.id}')" title="Редактировать">
                     ✏️
                 </button>
-                <button class="btn-icon danger" onclick="removeTeam('${team.id}')" title="Удалить">
+                <button class="btn-icon danger" onclick="window.removeTeam('${team.id}')" title="Удалить">
                     🗑️
                 </button>
             </td>
@@ -664,7 +697,7 @@ function updateTemplateTasks() {
     container.innerHTML = templateTasks.map((task, index) => `
         <div class="task-item">
             <span class="task-text">${task}</span>
-            <button class="btn-icon danger" onclick="removeTemplateTask(${index})" title="Удалить">
+            <button class="btn-icon danger" onclick="window.removeTemplateTask(${index})" title="Удалить">
                 🗑️
             </button>
         </div>
@@ -776,3 +809,6 @@ window.removeTask = removeTask;
 window.removeTemplateTask = removeTemplateTask;
 window.editTeam = editTeam;
 window.removeTeam = removeTeam;
+
+// Добавляем логирование для отладки
+console.log('app.js загружен, все функции определены');
