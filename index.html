@@ -223,6 +223,53 @@
         </div>
     </div>
 
+    <!-- НОВОЕ: Модальное окно команд для игры -->
+    <div class="modal" id="teamsModal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h2 id="teamsModalTitle">Команды участников</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="teams-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Всего команд:</span>
+                        <span class="stat-value" id="totalTeams">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Всего участников:</span>
+                        <span class="stat-value" id="totalParticipants">0</span>
+                    </div>
+                </div>
+
+                <div class="teams-table-container">
+                    <table class="teams-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Название команды</th>
+                                <th>Участников</th>
+                                <th>Капитан (соц. сеть)</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="teamsTableBody">
+                            <!-- Здесь будут команды -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <button class="btn btn-secondary" id="addTeamBtn">
+                    <span class="btn-icon">👥</span>
+                    Добавить команду
+                </button>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="closeTeamsBtn">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Модальное окно добавления задачи -->
     <div class="modal" id="taskModal">
         <div class="modal-content">
@@ -241,6 +288,37 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" id="cancelTaskBtn">Отмена</button>
                 <button type="submit" form="taskForm" class="btn btn-primary" id="saveTaskBtn">Добавить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- НОВОЕ: Модальное окно добавления/редактирования команды -->
+    <div class="modal" id="teamModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="teamModalTitle">Добавить команду</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="teamForm">
+                    <div class="form-group">
+                        <label for="teamName">Название команды*</label>
+                        <input type="text" id="teamName" required placeholder="Например: Команда Альфа">
+                    </div>
+                    <div class="form-group">
+                        <label for="teamMemberCount">Количество участников*</label>
+                        <input type="number" id="teamMemberCount" required min="1" max="20" placeholder="5">
+                    </div>
+                    <div class="form-group">
+                        <label for="teamCaptainLink">Ссылка на капитана (соц. сеть)</label>
+                        <input type="url" id="teamCaptainLink" placeholder="https://vk.com/captain или https://t.me/captain">
+                        <small class="form-hint">VK, Telegram, Instagram или другая соц. сеть</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancelTeamBtn">Отмена</button>
+                <button type="submit" form="teamForm" class="btn btn-primary" id="saveTeamBtn">Сохранить</button>
             </div>
         </div>
     </div>

@@ -17,6 +17,8 @@ let games = [];
 let templateTasks = ["Подготовить дипломы", "Написать сценарий", "Подписать список на пропуски"];
 let currentEditingGameId = null;
 let currentGameForTasks = null;
+let currentGameForTeams = null;
+let currentEditingTeamId = null;
 
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', function() {
@@ -91,9 +93,15 @@ function setupEventListeners() {
         openTaskModal('template');
     });
 
+    // НОВЫЕ обработчики для команд
+    document.getElementById('addTeamBtn').addEventListener('click', () => {
+        openTeamModal();
+    });
+
     // Формы
     document.getElementById('gameForm').addEventListener('submit', handleGameSubmit);
     document.getElementById('taskForm').addEventListener('submit', handleTaskSubmit);
+    document.getElementById('teamForm').addEventListener('submit', handleTeamSubmit);
 
     // Фильтры и поиск
     document.getElementById('statusFilter').addEventListener('change', filterGames);
@@ -112,6 +120,12 @@ function setupModalListeners() {
             }
             if (e.target.id === 'closeTasksBtn' || e.target.classList.contains('modal-close')) {
                 closeModal('tasksModal');
+            }
+            if (e.target.id === 'cancelTeamBtn' || e.target.classList.contains('modal-close')) {
+                closeModal('teamModal');
+            }
+            if (e.target.id === 'closeTeamsBtn' || e.target.classList.contains('modal-close')) {
+                closeModal('teamsModal');
             }
         });
     });
@@ -194,7 +208,7 @@ function updateUpcomingGamesList() {
     }).join('');
 }
 
-// Обновление таблицы игр
+// Обновление таблицы игр С НОВОЙ КНОПКОЙ КОМАНД
 function updateGamesTable() {
     const tbody = document.getElementById('gamesTableBody');
     const statusFilter = document.getElementById('statusFilter').value;
@@ -238,6 +252,9 @@ function updateGamesTable() {
                     <button class="btn-icon" onclick="openTasksModal('${game.id}')" title="Задачи">
                         ✓
                     </button>
+                    <button class="btn-icon" onclick="openTeamsModal('${game.id}')" title="Команды">
+                        👥
+                    </button>
                     <button class="btn-icon" onclick="editGame('${game.id}')" title="Редактировать">
                         ✏️
                     </button>
@@ -256,17 +273,18 @@ function updateGamesTable() {
 // Firebase функции для игр
 async function addGame(gameData) {
     try {
-        // Создаем задачи для новой игры
+        // Создаем задачи и пустой список команд для новой игры
         const tasks = templateTasks.map(taskName => ({
             id: generateId(),
             name: taskName,
             completed: false
         }));
 
-        // Добавляем игру в Firestore
+        // Добавляем игру в Firestore с пустым списком команд
         const docRef = await addDoc(collection(window.db, 'games'), {
             ...gameData,
             tasks: tasks,
+            teams: [], // НОВОЕ: пустой список команд
             createdAt: new Date()
         });
 
@@ -317,6 +335,18 @@ async function updateGameTasks(gameId, tasks) {
     }
 }
 
+// НОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С КОМАНДАМИ
+async function updateGameTeams(gameId, teams) {
+    try {
+        const gameRef = doc(window.db, 'games', gameId);
+        await updateDoc(gameRef, { teams: teams });
+        showNotification('Список команд обновлен!');
+    } catch (error) {
+        console.error("Ошибка обновления команд: ", error);
+        showNotification('Ошибка при обновлении команд');
+    }
+}
+
 // Модальные окна и формы
 function openGameModal(gameId = null) {
     currentEditingGameId = gameId;
@@ -354,6 +384,46 @@ function openTasksModal(gameId) {
     document.getElementById('tasksModal').style.display = 'flex';
 }
 
+// НОВАЯ ФУНКЦИЯ: Модальное окно команд
+function openTeamsModal(gameId) {
+    currentGameForTeams = gameId;
+    currentEditingTeamId = null;
+    const game = games.find(g => g.id === gameId);
+    if (!game) return;
+
+    document.getElementById('teamsModalTitle').textContent = `Команды участников: ${game.name}`;
+    updateTeamsList();
+
+    document.getElementById('teamsModal').style.display = 'flex';
+}
+
+// НОВАЯ ФУНКЦИЯ: Модальное окно добавления/редактирования команды
+function openTeamModal(teamId = null) {
+    currentEditingTeamId = teamId;
+    const modal = document.getElementById('teamModal');
+    const title = document.getElementById('teamModalTitle');
+    const form = document.getElementById('teamForm');
+
+    if (teamId && currentGameForTeams) {
+        // Редактирование команды
+        const game = games.find(g => g.id === currentGameForTeams);
+        const team = game?.teams?.find(t => t.id === teamId);
+
+        if (team) {
+            title.textContent = 'Редактировать команду';
+            document.getElementById('teamName').value = team.name;
+            document.getElementById('teamMemberCount').value = team.memberCount;
+            document.getElementById('teamCaptainLink').value = team.captainSocialLink || '';
+        }
+    } else {
+        // Добавление новой команды
+        title.textContent = 'Добавить команду';
+        form.reset();
+    }
+
+    modal.style.display = 'flex';
+}
+
 function openTaskModal(type) {
     document.getElementById('taskModal').style.display = 'flex';
     document.getElementById('taskForm').reset();
@@ -361,8 +431,13 @@ function openTaskModal(type) {
 
 function closeModal(modalId) {
     document.getElementById(modalId).style.display = 'none';
-    currentEditingGameId = null;
-    currentGameForTasks = null;
+    if (modalId === 'gameModal') currentEditingGameId = null;
+    if (modalId === 'tasksModal') currentGameForTasks = null;
+    if (modalId === 'teamsModal') {
+        currentGameForTeams = null;
+        currentEditingTeamId = null;
+    }
+    if (modalId === 'teamModal') currentEditingTeamId = null;
 }
 
 // Обработчики форм
@@ -412,6 +487,47 @@ async function handleTaskSubmit(e) {
     closeModal('taskModal');
 }
 
+// НОВЫЙ ОБРАБОТЧИК: Форма команды
+async function handleTeamSubmit(e) {
+    e.preventDefault();
+
+    const teamData = {
+        name: document.getElementById('teamName').value,
+        memberCount: parseInt(document.getElementById('teamMemberCount').value),
+        captainSocialLink: document.getElementById('teamCaptainLink').value || null
+    };
+
+    if (!currentGameForTeams) return;
+
+    const game = games.find(g => g.id === currentGameForTeams);
+    if (!game) return;
+
+    let updatedTeams = [...(game.teams || [])];
+
+    if (currentEditingTeamId) {
+        // Редактирование существующей команды
+        const teamIndex = updatedTeams.findIndex(t => t.id === currentEditingTeamId);
+        if (teamIndex !== -1) {
+            updatedTeams[teamIndex] = {
+                ...updatedTeams[teamIndex],
+                ...teamData
+            };
+        }
+    } else {
+        // Добавление новой команды
+        const newTeam = {
+            id: generateId(),
+            number: updatedTeams.length + 1,
+            ...teamData
+        };
+        updatedTeams.push(newTeam);
+    }
+
+    await updateGameTeams(currentGameForTeams, updatedTeams);
+    updateTeamsList();
+    closeModal('teamModal');
+}
+
 // Управление задачами - ИСПРАВЛЕННАЯ ГЕНЕРАЦИЯ HTML
 function updateTasksList() {
     if (!currentGameForTasks) return;
@@ -443,6 +559,53 @@ function updateTasksList() {
     `).join('');
 }
 
+// НОВАЯ ФУНКЦИЯ: Обновление списка команд
+function updateTeamsList() {
+    if (!currentGameForTeams) return;
+
+    const game = games.find(g => g.id === currentGameForTeams);
+    if (!game) return;
+
+    const teams = game.teams || [];
+
+    // Обновляем статистику
+    const totalTeams = teams.length;
+    const totalParticipants = teams.reduce((sum, team) => sum + team.memberCount, 0);
+
+    document.getElementById('totalTeams').textContent = totalTeams;
+    document.getElementById('totalParticipants').textContent = totalParticipants;
+
+    // Обновляем таблицу команд
+    const teamsTableBody = document.getElementById('teamsTableBody');
+
+    if (teams.length === 0) {
+        teamsTableBody.innerHTML = '<tr><td colspan="5" class="no-teams">Команды еще не добавлены</td></tr>';
+        return;
+    }
+
+    teamsTableBody.innerHTML = teams.map(team => `
+        <tr>
+            <td><span class="team-number">${team.number}</span></td>
+            <td><span class="team-name">${team.name}</span></td>
+            <td><span class="team-count">${team.memberCount}</span></td>
+            <td>
+                ${team.captainSocialLink ? 
+                    `<a href="${team.captainSocialLink}" target="_blank" class="captain-link">Перейти</a>` : 
+                    '<span class="captain-none">Не указано</span>'
+                }
+            </td>
+            <td class="team-actions">
+                <button class="btn-icon" onclick="editTeam('${team.id}')" title="Редактировать">
+                    ✏️
+                </button>
+                <button class="btn-icon danger" onclick="removeTeam('${team.id}')" title="Удалить">
+                    🗑️
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
 async function toggleTask(gameId, taskId) {
     const game = games.find(g => g.id === gameId);
     if (!game) return;
@@ -467,6 +630,32 @@ async function removeTask(gameId, taskId) {
     const tasks = game.tasks.filter(task => task.id !== taskId);
     await updateGameTasks(gameId, tasks);
     updateTasksList();
+}
+
+// НОВЫЕ ФУНКЦИИ: Управление командами
+function editTeam(teamId) {
+    openTeamModal(teamId);
+}
+
+async function removeTeam(teamId) {
+    if (!confirm('Удалить эту команду?')) return;
+
+    if (!currentGameForTeams) return;
+
+    const game = games.find(g => g.id === currentGameForTeams);
+    if (!game) return;
+
+    // Удаляем команду и пересчитываем номера
+    let updatedTeams = (game.teams || []).filter(team => team.id !== teamId);
+
+    // Пересчитываем номера команд
+    updatedTeams = updatedTeams.map((team, index) => ({
+        ...team,
+        number: index + 1
+    }));
+
+    await updateGameTeams(currentGameForTeams, updatedTeams);
+    updateTeamsList();
 }
 
 // Шаблоны задач - ИСПРАВЛЕННАЯ ГЕНЕРАЦИЯ HTML
@@ -522,6 +711,9 @@ async function duplicateGame(gameId) {
         }));
     }
 
+    // Очищаем список команд для копии
+    newGame.teams = [];
+
     await addGame(newGame);
 }
 
@@ -575,9 +767,12 @@ function showNotification(message, type = 'success') {
 
 // Глобальные функции для использования в HTML
 window.openTasksModal = openTasksModal;
+window.openTeamsModal = openTeamsModal;
 window.editGame = editGame;
 window.duplicateGame = duplicateGame;
 window.deleteGame = deleteGame;
 window.toggleTask = toggleTask;
 window.removeTask = removeTask;
 window.removeTemplateTask = removeTemplateTask;
+window.editTeam = editTeam;
+window.removeTeam = removeTeam;
