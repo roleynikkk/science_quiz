@@ -1,67 +1,73 @@
+// Firebase Firestore functions
+import { 
+    collection, 
+    addDoc, 
+    getDocs, 
+    updateDoc, 
+    deleteDoc, 
+    doc, 
+    onSnapshot,
+    query,
+    orderBy,
+    where
+} from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js';
+
 // Глобальные переменные
 let games = [];
 let templateTasks = ["Подготовить дипломы", "Написать сценарий", "Подписать список на пропуски"];
 let currentEditingGameId = null;
-
-// Начальные данные
-const sampleGames = [
-    {
-        id: 1,
-        name: "ScienceQuiz #1 - Физика и астрономия",
-        date: "2025-09-15",
-        time: "18:00",
-        venue: "Актовый зал школы №5",
-        status: "Планируется"
-    },
-    {
-        id: 2,
-        name: "ScienceQuiz #2 - Биология и медицина",
-        date: "2025-09-22",
-        time: "18:00",
-        venue: "Конференц-зал библиотеки",
-        status: "Планируется"
-    }
-];
+let currentGameForTasks = null;
 
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', function() {
-    initializeApp();
-    setupEventListeners();
-    loadInitialData();
+    // Ждем пока Firebase инициализируется
+    setTimeout(() => {
+        if (window.db) {
+            initializeApp();
+            setupEventListeners();
+        } else {
+            console.error('Firebase не инициализирован');
+        }
+    }, 1000);
 });
 
 function initializeApp() {
-    // Загрузить данные из localStorage или использовать образцы
-    const savedGames = localStorage.getItem('scienceQuizGames');
+    // Настраиваем реалтайм-слушатель для игр
+    setupRealtimeListeners();
+
+    // Загружаем шаблоны задач из localStorage (пока оставим локально)
     const savedTasks = localStorage.getItem('scienceQuizTemplateTasks');
-    
-    if (savedGames) {
-        games = JSON.parse(savedGames);
-    } else {
-        // Инициализировать образцы игр с задачами
-        games = sampleGames.map(game => ({
-            ...game,
-            tasks: templateTasks.map(taskName => ({
-                id: generateId(),
-                name: taskName,
-                completed: false
-            }))
-        }));
-        saveGames();
-    }
-    
     if (savedTasks) {
         templateTasks = JSON.parse(savedTasks);
     } else {
         saveTemplateTasks();
     }
+
+    updateTemplateTasks();
 }
 
-function loadInitialData() {
-    updateDashboard();
-    updateGamesTable();
-    updateTemplateTasks();
-    updateStatistics();
+// Настройка реалтайм-слушателей Firebase
+function setupRealtimeListeners() {
+    const gamesRef = collection(window.db, 'games');
+    const q = query(gamesRef, orderBy('createdAt', 'desc'));
+
+    onSnapshot(q, (snapshot) => {
+        games = [];
+        snapshot.forEach((doc) => {
+            games.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+
+        // Обновляем интерфейс
+        updateDashboard();
+        updateGamesTable();
+        updateStatistics();
+    }, (error) => {
+        console.error("Ошибка получения игр:", error);
+        showNotification('Ошибка соединения с базой данных');
+    });
 }
 
 function setupEventListeners() {
@@ -75,155 +81,295 @@ function setupEventListeners() {
 
     // Модальные окна
     setupModalListeners();
-    
+
+    // Кнопки действий
+    document.getElementById('addGameBtn').addEventListener('click', () => {
+        openGameModal();
+    });
+
+    document.getElementById('addTemplateTaskBtn').addEventListener('click', () => {
+        openTaskModal('template');
+    });
+
     // Формы
-    setupFormListeners();
-    
-    // Поиск и фильтры
-    setupSearchAndFilters();
+    document.getElementById('gameForm').addEventListener('submit', handleGameSubmit);
+    document.getElementById('taskForm').addEventListener('submit', handleTaskSubmit);
+
+    // Фильтры и поиск
+    document.getElementById('statusFilter').addEventListener('change', filterGames);
+    document.getElementById('searchInput').addEventListener('input', filterGames);
 }
 
 function setupModalListeners() {
-    // Модальное окно добавления игры
-    const addGameBtn = document.getElementById('addGameBtn');
-    const closeGameModal = document.getElementById('closeGameModal');
-    const cancelGameModal = document.getElementById('cancelGameModal');
-    const gameModalOverlay = document.getElementById('gameModalOverlay');
-
-    if (addGameBtn) {
-        addGameBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            currentEditingGameId = null;
-            document.getElementById('gameModalTitle').textContent = 'Добавить новую игру';
-            document.getElementById('gameForm').reset();
-            showModal('addGameModal');
+    // Закрытие модальных окон
+    document.querySelectorAll('.modal-close, .btn-secondary').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            if (e.target.id === 'cancelGameBtn' || e.target.classList.contains('modal-close')) {
+                closeModal('gameModal');
+            }
+            if (e.target.id === 'cancelTaskBtn' || e.target.classList.contains('modal-close')) {
+                closeModal('taskModal');
+            }
+            if (e.target.id === 'closeTasksBtn' || e.target.classList.contains('modal-close')) {
+                closeModal('tasksModal');
+            }
         });
-    }
-
-    [closeGameModal, cancelGameModal, gameModalOverlay].forEach(element => {
-        if (element) {
-            element.addEventListener('click', () => hideModal('addGameModal'));
-        }
     });
 
-    // Модальное окно задач игры
-    const closeTasksModal = document.getElementById('closeTasksModal');
-    const closeTasksModalBtn = document.getElementById('closeTasksModalBtn');
-    const tasksModalOverlay = document.getElementById('tasksModalOverlay');
-
-    [closeTasksModal, closeTasksModalBtn, tasksModalOverlay].forEach(element => {
-        if (element) {
-            element.addEventListener('click', () => hideModal('gameTasksModal'));
-        }
+    // Закрытие по клику вне модального окна
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
     });
 
-    // Модальное окно добавления задачи в шаблон
-    const addTemplateTaskBtn = document.getElementById('addTemplateTaskBtn');
-    const closeTemplateTaskModal = document.getElementById('closeTemplateTaskModal');
-    const cancelTemplateTaskModal = document.getElementById('cancelTemplateTaskModal');
-    const templateTaskModalOverlay = document.getElementById('templateTaskModalOverlay');
-
-    if (addTemplateTaskBtn) {
-        addTemplateTaskBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            document.getElementById('templateTaskForm').reset();
-            showModal('addTemplateTaskModal');
-        });
-    }
-
-    [closeTemplateTaskModal, cancelTemplateTaskModal, templateTaskModalOverlay].forEach(element => {
-        if (element) {
-            element.addEventListener('click', () => hideModal('addTemplateTaskModal'));
-        }
+    // Закрытие уведомлений
+    document.querySelector('.notification-close').addEventListener('click', () => {
+        document.getElementById('notification').style.display = 'none';
     });
 }
 
-function setupFormListeners() {
-    // Форма добавления/редактирования игры
-    const gameForm = document.getElementById('gameForm');
-    if (gameForm) {
-        gameForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            saveGame();
-        });
-    }
-
-    // Форма добавления задачи в шаблон
-    const templateTaskForm = document.getElementById('templateTaskForm');
-    if (templateTaskForm) {
-        templateTaskForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            addTemplateTask();
-        });
-    }
-}
-
-function setupSearchAndFilters() {
-    const gameSearch = document.getElementById('gameSearch');
-    const statusFilter = document.getElementById('statusFilter');
-
-    if (gameSearch) {
-        gameSearch.addEventListener('input', updateGamesTable);
-    }
-    if (statusFilter) {
-        statusFilter.addEventListener('change', updateGamesTable);
-    }
-}
-
-// Навигация
-function showSection(sectionId) {
-    // Скрыть все секции
+// Навигация между секциями
+function showSection(sectionName) {
+    // Убираем активные классы
     document.querySelectorAll('.section').forEach(section => {
         section.classList.remove('active');
     });
-    
-    // Показать выбранную секцию
-    const targetSection = document.getElementById(sectionId);
-    if (targetSection) {
-        targetSection.classList.add('active');
-    }
-    
-    // Обновить активный элемент навигации
     document.querySelectorAll('.nav-item').forEach(item => {
         item.classList.remove('active');
     });
-    const activeNav = document.querySelector(`[data-section="${sectionId}"]`);
-    if (activeNav) {
-        activeNav.classList.add('active');
+
+    // Добавляем активные классы
+    document.getElementById(sectionName).classList.add('active');
+    document.querySelector(`[data-section="${sectionName}"]`).classList.add('active');
+}
+
+// Обновление дашборда
+function updateDashboard() {
+    const totalGames = games.length;
+    const upcomingGames = games.filter(game => game.status !== 'Завершена').length;
+    const completedTasks = games.reduce((total, game) => {
+        return total + (game.tasks ? game.tasks.filter(task => task.completed).length : 0);
+    }, 0);
+
+    document.getElementById('totalGames').textContent = totalGames;
+    document.getElementById('upcomingGames').textContent = upcomingGames;
+    document.getElementById('completedTasks').textContent = completedTasks;
+
+    // Отображение ближайших игр
+    updateUpcomingGamesList();
+}
+
+function updateUpcomingGamesList() {
+    const upcomingGamesContainer = document.getElementById('upcomingGamesList');
+    const upcomingGames = games
+        .filter(game => game.status !== 'Завершена')
+        .slice(0, 3);
+
+    if (upcomingGames.length === 0) {
+        upcomingGamesContainer.innerHTML = '<p class="no-games">Нет предстоящих игр</p>';
+        return;
     }
-    
-    // Обновить данные при переходе на секцию
-    if (sectionId === 'dashboard') {
-        updateDashboard();
-    } else if (sectionId === 'games') {
-        updateGamesTable();
-    } else if (sectionId === 'templates') {
-        updateTemplateTasks();
-    } else if (sectionId === 'statistics') {
-        updateStatistics();
+
+    upcomingGamesContainer.innerHTML = upcomingGames.map(game => {
+        const progress = calculateProgress(game);
+        return `
+            <div class="game-preview-card">
+                <h3>${game.name}</h3>
+                <div class="game-details">
+                    <span>📅 ${formatDate(game.date)} в ${game.time}</span>
+                    <span>📍 ${game.venue}</span>
+                    <span class="status status-${game.status.toLowerCase()}">${game.status}</span>
+                </div>
+                <div class="progress-mini">
+                    <div class="progress-bar-mini">
+                        <div class="progress-fill-mini" style="width: ${progress}%"></div>
+                    </div>
+                    <span>${progress}%</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Обновление таблицы игр
+function updateGamesTable() {
+    const tbody = document.getElementById('gamesTableBody');
+    const statusFilter = document.getElementById('statusFilter').value;
+    const searchQuery = document.getElementById('searchInput').value.toLowerCase();
+
+    let filteredGames = games;
+
+    if (statusFilter) {
+        filteredGames = filteredGames.filter(game => game.status === statusFilter);
+    }
+
+    if (searchQuery) {
+        filteredGames = filteredGames.filter(game => 
+            game.name.toLowerCase().includes(searchQuery)
+        );
+    }
+
+    if (filteredGames.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="no-data">Игры не найдены</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = filteredGames.map(game => {
+        const progress = calculateProgress(game);
+        return `
+            <tr>
+                <td>${game.name}</td>
+                <td>${formatDate(game.date)}</td>
+                <td>${game.time}</td>
+                <td>${game.venue}</td>
+                <td><span class="status status-${game.status.toLowerCase()}">${game.status}</span></td>
+                <td>
+                    <div class="progress-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${progress}%"></div>
+                        </div>
+                        <span class="progress-text">${progress}%</span>
+                    </div>
+                </td>
+                <td class="actions">
+                    <button class="btn-icon" onclick="openTasksModal('${game.id}')" title="Задачи">
+                        ✓
+                    </button>
+                    <button class="btn-icon" onclick="editGame('${game.id}')" title="Редактировать">
+                        ✏️
+                    </button>
+                    <button class="btn-icon" onclick="duplicateGame('${game.id}')" title="Дублировать">
+                        📋
+                    </button>
+                    <button class="btn-icon danger" onclick="deleteGame('${game.id}')" title="Удалить">
+                        🗑️
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Firebase функции для игр
+async function addGame(gameData) {
+    try {
+        // Создаем задачи для новой игры
+        const tasks = templateTasks.map(taskName => ({
+            id: generateId(),
+            name: taskName,
+            completed: false
+        }));
+
+        // Добавляем игру в Firestore
+        const docRef = await addDoc(collection(window.db, 'games'), {
+            ...gameData,
+            tasks: tasks,
+            createdAt: new Date()
+        });
+
+        console.log("Игра добавлена с ID: ", docRef.id);
+        showNotification('Игра успешно добавлена!');
+        closeModal('gameModal');
+
+    } catch (error) {
+        console.error("Ошибка добавления игры: ", error);
+        showNotification('Ошибка при добавлении игры');
     }
 }
 
-// Управление модальными окнами
-function showModal(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
+async function updateGame(gameId, updateData) {
+    try {
+        const gameRef = doc(window.db, 'games', gameId);
+        await updateDoc(gameRef, updateData);
+        showNotification('Игра обновлена!');
+        closeModal('gameModal');
+    } catch (error) {
+        console.error("Ошибка обновления игры: ", error);
+        showNotification('Ошибка при обновлении игры');
     }
 }
 
-function hideModal(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.classList.add('hidden');
-        document.body.style.overflow = '';
+async function deleteGame(gameId) {
+    if (!confirm('Вы уверены, что хотите удалить эту игру?')) {
+        return;
+    }
+
+    try {
+        await deleteDoc(doc(window.db, 'games', gameId));
+        showNotification('Игра удалена!');
+    } catch (error) {
+        console.error("Ошибка удаления игры: ", error);
+        showNotification('Ошибка при удалении игры');
     }
 }
 
-// Управление играми
-function saveGame() {
-    const formData = {
+async function updateGameTasks(gameId, tasks) {
+    try {
+        const gameRef = doc(window.db, 'games', gameId);
+        await updateDoc(gameRef, { tasks: tasks });
+        showNotification('Задачи обновлены!');
+    } catch (error) {
+        console.error("Ошибка обновления задач: ", error);
+        showNotification('Ошибка при обновлении задач');
+    }
+}
+
+// Модальные окна и формы
+function openGameModal(gameId = null) {
+    currentEditingGameId = gameId;
+    const modal = document.getElementById('gameModal');
+    const title = document.getElementById('gameModalTitle');
+    const form = document.getElementById('gameForm');
+
+    if (gameId) {
+        title.textContent = 'Редактировать игру';
+        const game = games.find(g => g.id === gameId);
+        if (game) {
+            document.getElementById('gameName').value = game.name;
+            document.getElementById('gameDate').value = game.date;
+            document.getElementById('gameTime').value = game.time;
+            document.getElementById('gameVenue').value = game.venue;
+            document.getElementById('gameStatus').value = game.status;
+        }
+    } else {
+        title.textContent = 'Добавить игру';
+        form.reset();
+        document.getElementById('gameStatus').value = 'Планируется';
+    }
+
+    modal.style.display = 'flex';
+}
+
+function openTasksModal(gameId) {
+    currentGameForTasks = gameId;
+    const game = games.find(g => g.id === gameId);
+    if (!game) return;
+
+    document.getElementById('tasksModalTitle').textContent = `Задачи для игры: ${game.name}`;
+    updateTasksList();
+
+    document.getElementById('tasksModal').style.display = 'flex';
+}
+
+function openTaskModal(type) {
+    document.getElementById('taskModal').style.display = 'flex';
+    document.getElementById('taskForm').reset();
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).style.display = 'none';
+    currentEditingGameId = null;
+    currentGameForTasks = null;
+}
+
+// Обработчики форм
+async function handleGameSubmit(e) {
+    e.preventDefault();
+
+    const gameData = {
         name: document.getElementById('gameName').value,
         date: document.getElementById('gameDate').value,
         time: document.getElementById('gameTime').value,
@@ -232,373 +378,207 @@ function saveGame() {
     };
 
     if (currentEditingGameId) {
-        // Редактирование существующей игры
-        const gameIndex = games.findIndex(g => g.id === currentEditingGameId);
-        if (gameIndex !== -1) {
-            games[gameIndex] = { ...games[gameIndex], ...formData };
-        }
+        await updateGame(currentEditingGameId, gameData);
     } else {
-        // Создание новой игры
-        const newGame = {
-            id: generateId(),
-            ...formData,
-            tasks: templateTasks.map(taskName => ({
+        await addGame(gameData);
+    }
+}
+
+async function handleTaskSubmit(e) {
+    e.preventDefault();
+
+    const taskName = document.getElementById('taskName').value;
+
+    if (currentGameForTasks) {
+        // Добавляем задачу к конкретной игре
+        const game = games.find(g => g.id === currentGameForTasks);
+        if (game) {
+            const newTask = {
                 id: generateId(),
                 name: taskName,
                 completed: false
-            }))
-        };
-        games.push(newGame);
-    }
-
-    saveGames();
-    hideModal('addGameModal');
-    updateGamesTable();
-    updateDashboard();
-    
-    showNotification('Игра успешно сохранена', 'success');
-}
-
-// Глобальные функции для обработки событий
-window.editGame = function(gameId) {
-    const game = games.find(g => g.id === gameId);
-    if (!game) return;
-
-    currentEditingGameId = gameId;
-    document.getElementById('gameModalTitle').textContent = 'Редактировать игру';
-    document.getElementById('gameName').value = game.name;
-    document.getElementById('gameDate').value = game.date;
-    document.getElementById('gameTime').value = game.time;
-    document.getElementById('gameVenue').value = game.venue;
-    document.getElementById('gameStatus').value = game.status;
-    
-    showModal('addGameModal');
-};
-
-window.deleteGame = function(gameId) {
-    if (confirm('Вы уверены, что хотите удалить эту игру?')) {
-        games = games.filter(g => g.id !== gameId);
-        saveGames();
-        updateGamesTable();
-        updateDashboard();
-        showNotification('Игра удалена', 'info');
-    }
-};
-
-window.duplicateGame = function(gameId) {
-    const game = games.find(g => g.id === gameId);
-    if (!game) return;
-
-    const duplicatedGame = {
-        ...game,
-        id: generateId(),
-        name: game.name + ' (копия)',
-        status: 'Планируется',
-        tasks: game.tasks.map(task => ({
-            ...task,
-            id: generateId(),
-            completed: false
-        }))
-    };
-
-    games.push(duplicatedGame);
-    saveGames();
-    updateGamesTable();
-    updateDashboard();
-    showNotification('Игра продублирована', 'success');
-};
-
-window.showGameTasks = function(gameId) {
-    const game = games.find(g => g.id === gameId);
-    if (!game) return;
-
-    document.getElementById('gameTasksTitle').textContent = `Задачи для игры: ${game.name}`;
-    
-    const tasksList = document.getElementById('gameTasksList');
-    tasksList.innerHTML = '';
-
-    game.tasks.forEach(task => {
-        const taskItem = document.createElement('div');
-        taskItem.className = `task-item ${task.completed ? 'completed' : ''}`;
-        taskItem.innerHTML = `
-            <input type="checkbox" class="task-checkbox" ${task.completed ? 'checked' : ''} 
-                   onchange="toggleTaskCompletion(${gameId}, ${task.id})">
-            <span class="task-name">${task.name}</span>
-        `;
-        tasksList.appendChild(taskItem);
-    });
-
-    showModal('gameTasksModal');
-};
-
-window.toggleTaskCompletion = function(gameId, taskId) {
-    const game = games.find(g => g.id === gameId);
-    if (!game) return;
-
-    const task = game.tasks.find(t => t.id === taskId);
-    if (!task) return;
-
-    task.completed = !task.completed;
-    saveGames();
-    updateGamesTable();
-    updateDashboard();
-    
-    // Обновить отображение задач в модальном окне
-    showGameTasks(gameId);
-};
-
-// Управление шаблонами задач
-function addTemplateTask() {
-    const taskName = document.getElementById('templateTaskName').value;
-    if (!taskName.trim()) return;
-
-    templateTasks.push(taskName);
-    saveTemplateTasks();
-    updateTemplateTasks();
-    hideModal('addTemplateTaskModal');
-    showNotification('Задача добавлена в шаблон', 'success');
-}
-
-window.removeTemplateTask = function(taskName) {
-    if (confirm('Удалить эту задачу из шаблона? Это не повлияет на уже созданные игры.')) {
-        templateTasks = templateTasks.filter(task => task !== taskName);
+            };
+            const updatedTasks = [...(game.tasks || []), newTask];
+            await updateGameTasks(currentGameForTasks, updatedTasks);
+            updateTasksList();
+        }
+    } else {
+        // Добавляем к шаблону
+        templateTasks.push(taskName);
         saveTemplateTasks();
         updateTemplateTasks();
-        showNotification('Задача удалена из шаблона', 'info');
     }
-};
 
-// Обновление интерфейса
-function updateDashboard() {
-    // Обновить статистику
-    const totalGames = games.length;
-    const upcomingGames = games.filter(g => g.status === 'Планируется').length;
-    const completedGames = games.filter(g => g.status === 'Завершена').length;
-
-    const totalGamesEl = document.getElementById('totalGames');
-    const upcomingGamesEl = document.getElementById('upcomingGames');
-    const completedGamesEl = document.getElementById('completedGames');
-
-    if (totalGamesEl) totalGamesEl.textContent = totalGames;
-    if (upcomingGamesEl) upcomingGamesEl.textContent = upcomingGames;
-    if (completedGamesEl) completedGamesEl.textContent = completedGames;
-
-    // Обновить список ближайших игр
-    updateUpcomingGames();
+    closeModal('taskModal');
 }
 
-function updateUpcomingGames() {
-    const upcomingGamesList = document.getElementById('upcomingGamesList');
-    if (!upcomingGamesList) return;
+// Управление задачами
+function updateTasksList() {
+    if (!currentGameForTasks) return;
 
-    const upcoming = games
-        .filter(g => g.status === 'Планируется')
-        .sort((a, b) => new Date(a.date) - new Date(b.date))
-        .slice(0, 3);
+    const game = games.find(g => g.id === currentGameForTasks);
+    if (!game) return;
 
-    if (upcoming.length === 0) {
-        upcomingGamesList.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state-icon">📅</div>
-                <div class="empty-state-title">Нет предстоящих игр</div>
-                <div class="empty-state-description">Создайте новую игру, чтобы начать планирование</div>
-            </div>
-        `;
-        return;
-    }
+    const tasks = game.tasks || [];
+    const completed = tasks.filter(t => t.completed).length;
+    const progress = tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0;
 
-    upcomingGamesList.innerHTML = upcoming.map(game => {
-        const progress = calculateGameProgress(game);
-        const formattedDate = formatDate(game.date);
-        
-        return `
-            <div class="upcoming-game-card">
-                <div class="upcoming-game-info">
-                    <h4>${game.name}</h4>
-                    <div class="upcoming-game-details">
-                        ${formattedDate} в ${game.time} • ${game.venue}
-                    </div>
-                </div>
-                <div class="progress-info">
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: ${progress}%"></div>
-                    </div>
-                    <div class="progress-text">${progress}% готово</div>
-                </div>
-            </div>
-        `;
-    }).join('');
-}
+    // Обновляем прогресс
+    document.getElementById('tasksProgress').style.width = progress + '%';
+    document.getElementById('tasksProgressText').textContent = progress + '%';
 
-function updateGamesTable() {
-    const gameSearch = document.getElementById('gameSearch');
-    const statusFilter = document.getElementById('statusFilter');
-    
-    const searchTerm = gameSearch ? gameSearch.value.toLowerCase() : '';
-    const statusFilterValue = statusFilter ? statusFilter.value : '';
-    
-    let filteredGames = games.filter(game => {
-        const matchesSearch = game.name.toLowerCase().includes(searchTerm) ||
-                            game.venue.toLowerCase().includes(searchTerm);
-        const matchesStatus = !statusFilterValue || game.status === statusFilterValue;
-        return matchesSearch && matchesStatus;
-    });
-
-    const tbody = document.getElementById('gamesTableBody');
-    if (!tbody) return;
-    
-    if (filteredGames.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="7" class="empty-state">
-                    <div class="empty-state-icon">🎯</div>
-                    <div class="empty-state-title">Игры не найдены</div>
-                    <div class="empty-state-description">Попробуйте изменить критерии поиска или добавьте новую игру</div>
-                </td>
-            </tr>
-        `;
-        return;
-    }
-
-    tbody.innerHTML = filteredGames.map(game => {
-        const progress = calculateGameProgress(game);
-        const formattedDate = formatDate(game.date);
-        const statusBadge = getStatusBadge(game.status);
-        
-        return `
-            <tr>
-                <td>${formattedDate}</td>
-                <td>${game.name}</td>
-                <td>${game.venue}</td>
-                <td>${game.time}</td>
-                <td>${statusBadge}</td>
-                <td>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: ${progress}%"></div>
-                    </div>
-                    <div class="progress-text">${progress}% (${game.tasks.filter(t => t.completed).length}/${game.tasks.length})</div>
-                </td>
-                <td>
-                    <div class="table-actions">
-                        <button class="action-btn" onclick="showGameTasks(${game.id})" title="Задачи">📋</button>
-                        <button class="action-btn" onclick="editGame(${game.id})" title="Редактировать">✏️</button>
-                        <button class="action-btn" onclick="duplicateGame(${game.id})" title="Дублировать">📋</button>
-                        <button class="action-btn" onclick="deleteGame(${game.id})" title="Удалить">🗑️</button>
-                    </div>
-                </td>
-            </tr>
-        `;
-    }).join('');
-}
-
-function updateTemplateTasks() {
-    const templateTasksList = document.getElementById('templateTasksList');
-    if (!templateTasksList) return;
-    
-    if (templateTasks.length === 0) {
-        templateTasksList.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state-icon">📋</div>
-                <div class="empty-state-title">Нет задач в шаблоне</div>
-                <div class="empty-state-description">Добавьте задачи, которые будут автоматически создаваться для каждой новой игры</div>
-            </div>
-        `;
-        return;
-    }
-
-    templateTasksList.innerHTML = templateTasks.map(taskName => `
-        <div class="template-task-item">
-            <span class="template-task-name">${taskName}</span>
-            <div class="template-task-actions">
-                <button class="action-btn" onclick="removeTemplateTask('${taskName}')" title="Удалить">🗑️</button>
-            </div>
+    // Обновляем список задач
+    const tasksList = document.getElementById('gameTasksList');
+    tasksList.innerHTML = tasks.map(task => `
+        <div class="task-item">
+            <label class="task-checkbox">
+                <input type="checkbox" ${task.completed ? 'checked' : ''} 
+                       onchange="toggleTask('${game.id}', '${task.id}')">
+                <span class="checkmark"></span>
+                <span class="task-text ${task.completed ? 'completed' : ''}">${task.name}</span>
+            </label>
+            <button class="btn-icon danger" onclick="removeTask('${game.id}', '${task.id}')" title="Удалить">
+                🗑️
+            </button>
         </div>
     `).join('');
 }
 
-function updateStatistics() {
-    const avgCompletionEl = document.getElementById('avgCompletion');
-    if (!avgCompletionEl) return;
+async function toggleTask(gameId, taskId) {
+    const game = games.find(g => g.id === gameId);
+    if (!game) return;
 
-    if (games.length === 0) {
-        avgCompletionEl.textContent = '0%';
-        return;
-    }
-
-    const totalTasks = games.reduce((sum, game) => sum + game.tasks.length, 0);
-    const completedTasks = games.reduce((sum, game) => sum + game.tasks.filter(t => t.completed).length, 0);
-    const avgCompletion = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-    
-    avgCompletionEl.textContent = avgCompletion + '%';
-}
-
-// Вспомогательные функции
-function generateId() {
-    return Date.now() + Math.random();
-}
-
-function calculateGameProgress(game) {
-    if (!game.tasks || game.tasks.length === 0) return 0;
-    const completedTasks = game.tasks.filter(task => task.completed).length;
-    return Math.round((completedTasks / game.tasks.length) * 100);
-}
-
-function formatDate(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ru-RU', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
+    const tasks = game.tasks.map(task => {
+        if (task.id === taskId) {
+            return { ...task, completed: !task.completed };
+        }
+        return task;
     });
+
+    await updateGameTasks(gameId, tasks);
+    updateTasksList();
 }
 
-function getStatusBadge(status) {
-    const statusClasses = {
-        'Планируется': 'status-badge--planned',
-        'В процессе': 'status-badge--in-progress',
-        'Завершена': 'status-badge--completed'
-    };
-    
-    return `<span class="status-badge ${statusClasses[status] || ''}">${status}</span>`;
+async function removeTask(gameId, taskId) {
+    if (!confirm('Удалить эту задачу?')) return;
+
+    const game = games.find(g => g.id === gameId);
+    if (!game) return;
+
+    const tasks = game.tasks.filter(task => task.id !== taskId);
+    await updateGameTasks(gameId, tasks);
+    updateTasksList();
 }
 
-function saveGames() {
-    localStorage.setItem('scienceQuizGames', JSON.stringify(games));
+// Шаблоны задач
+function updateTemplateTasks() {
+    const container = document.getElementById('templateTasksList');
+    container.innerHTML = templateTasks.map((task, index) => `
+        <div class="task-item">
+            <span class="task-text">${task}</span>
+            <button class="btn-icon danger" onclick="removeTemplateTask(${index})" title="Удалить">
+                🗑️
+            </button>
+        </div>
+    `).join('');
+}
+
+function removeTemplateTask(index) {
+    if (!confirm('Удалить эту задачу из шаблона?')) return;
+
+    templateTasks.splice(index, 1);
+    saveTemplateTasks();
+    updateTemplateTasks();
 }
 
 function saveTemplateTasks() {
     localStorage.setItem('scienceQuizTemplateTasks', JSON.stringify(templateTasks));
 }
 
-function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-    notification.innerHTML = `
-        <div class="notification-content">
-            <div class="notification-message">${message}</div>
-        </div>
-        <button class="notification-close">×</button>
-    `;
-
-    const notificationsContainer = document.getElementById('notifications');
-    if (notificationsContainer) {
-        notificationsContainer.appendChild(notification);
-
-        // Автоматически скрыть через 5 секунд
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
-            }
-        }, 5000);
-
-        // Закрытие по клику
-        const closeBtn = notification.querySelector('.notification-close');
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => {
-                if (notification.parentNode) {
-                    notification.parentNode.removeChild(notification);
-                }
-            });
-        }
-    }
+// Другие функции
+function editGame(gameId) {
+    openGameModal(gameId);
 }
+
+async function duplicateGame(gameId) {
+    const game = games.find(g => g.id === gameId);
+    if (!game) return;
+
+    const newGame = {
+        ...game,
+        name: game.name + ' (копия)',
+        date: '',
+        status: 'Планируется'
+    };
+
+    delete newGame.id;
+    delete newGame.createdAt;
+
+    // Сброс статуса задач
+    if (newGame.tasks) {
+        newGame.tasks = newGame.tasks.map(task => ({
+            ...task,
+            completed: false,
+            id: generateId()
+        }));
+    }
+
+    await addGame(newGame);
+}
+
+function filterGames() {
+    updateGamesTable();
+}
+
+function updateStatistics() {
+    const totalCompleted = games.filter(game => game.status === 'Завершена').length;
+    const totalPlanned = games.filter(game => game.status === 'Планируется').length;
+
+    const totalTasks = games.reduce((sum, game) => sum + (game.tasks?.length || 0), 0);
+    const completedTasks = games.reduce((sum, game) => 
+        sum + (game.tasks?.filter(task => task.completed).length || 0), 0);
+
+    const overallProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+    document.getElementById('totalCompletedGames').textContent = totalCompleted;
+    document.getElementById('totalPlannedGames').textContent = totalPlanned;
+    document.getElementById('overallProgress').textContent = overallProgress + '%';
+}
+
+// Вспомогательные функции
+function calculateProgress(game) {
+    if (!game.tasks || game.tasks.length === 0) return 0;
+    const completed = game.tasks.filter(task => task.completed).length;
+    return Math.round((completed / game.tasks.length) * 100);
+}
+
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('ru-RU');
+}
+
+function generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
+
+function showNotification(message, type = 'success') {
+    const notification = document.getElementById('notification');
+    const text = document.getElementById('notificationText');
+
+    text.textContent = message;
+    notification.className = `notification ${type}`;
+    notification.style.display = 'block';
+
+    setTimeout(() => {
+        notification.style.display = 'none';
+    }, 3000);
+}
+
+// Глобальные функции для использования в HTML
+window.openTasksModal = openTasksModal;
+window.editGame = editGame;
+window.duplicateGame = duplicateGame;
+window.deleteGame = deleteGame;
+window.toggleTask = toggleTask;
+window.removeTask = removeTask;
+window.removeTemplateTask = removeTemplateTask;

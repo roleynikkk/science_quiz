@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -49,18 +49,18 @@
                     </div>
                     <div class="stat-card">
                         <div class="stat-number" id="upcomingGames">0</div>
-                        <div class="stat-label">Предстоящих игр</div>
+                        <div class="stat-label">Предстоящие игры</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number" id="completedGames">0</div>
-                        <div class="stat-label">Завершенных игр</div>
+                        <div class="stat-number" id="completedTasks">0</div>
+                        <div class="stat-label">Выполненные задачи</div>
                     </div>
                 </div>
 
-                <div class="dashboard-section">
-                    <h3>Ближайшие игры</h3>
-                    <div id="upcomingGamesList" class="upcoming-games">
-                        <!-- Динамически заполняется -->
+                <div class="upcoming-games">
+                    <h2>Ближайшие игры</h2>
+                    <div id="upcomingGamesList" class="games-preview">
+                        <!-- Здесь будут отображаться ближайшие игры -->
                     </div>
                 </div>
             </div>
@@ -69,33 +69,37 @@
             <div class="section" id="games">
                 <div class="page-header">
                     <h1>Расписание игр</h1>
-                    <div class="page-actions">
-                        <input type="text" id="gameSearch" placeholder="Поиск игр..." class="form-control search-input">
-                        <select id="statusFilter" class="form-control">
-                            <option value="">Все статусы</option>
-                            <option value="Планируется">Планируется</option>
-                            <option value="В процессе">В процессе</option>
-                            <option value="Завершена">Завершена</option>
-                        </select>
-                        <button class="btn btn--primary" id="addGameBtn">+ Добавить игру</button>
-                    </div>
+                    <button class="btn btn-primary" id="addGameBtn">
+                        <span class="btn-icon">➕</span>
+                        Добавить игру
+                    </button>
                 </div>
 
-                <div class="games-table-container">
+                <div class="filters">
+                    <select id="statusFilter" class="filter-select">
+                        <option value="">Все статусы</option>
+                        <option value="Планируется">Планируется</option>
+                        <option value="В процессе">В процессе</option>
+                        <option value="Завершена">Завершена</option>
+                    </select>
+                    <input type="text" id="searchInput" placeholder="Поиск по названию..." class="search-input">
+                </div>
+
+                <div class="table-container">
                     <table class="games-table">
                         <thead>
                             <tr>
+                                <th>Название</th>
                                 <th>Дата</th>
-                                <th>Название игры</th>
-                                <th>Место проведения</th>
                                 <th>Время</th>
+                                <th>Место</th>
                                 <th>Статус</th>
                                 <th>Прогресс</th>
                                 <th>Действия</th>
                             </tr>
                         </thead>
                         <tbody id="gamesTableBody">
-                            <!-- Динамически заполняется -->
+                            <!-- Здесь будут отображаться игры -->
                         </tbody>
                     </table>
                 </div>
@@ -105,14 +109,17 @@
             <div class="section" id="templates">
                 <div class="page-header">
                     <h1>Шаблоны задач</h1>
-                    <button class="btn btn--primary" id="addTemplateTaskBtn">+ Добавить задачу</button>
+                    <p class="page-subtitle">Настройте задачи, которые автоматически создаются для каждой игры</p>
                 </div>
 
                 <div class="template-tasks">
-                    <p class="section-description">Эти задачи автоматически создаются для каждой новой игры:</p>
-                    <div id="templateTasksList" class="template-tasks-list">
-                        <!-- Динамически заполняется -->
+                    <div class="tasks-list" id="templateTasksList">
+                        <!-- Здесь будут шаблоны задач -->
                     </div>
+                    <button class="btn btn-secondary" id="addTemplateTaskBtn">
+                        <span class="btn-icon">➕</span>
+                        Добавить задачу в шаблон
+                    </button>
                 </div>
             </div>
 
@@ -123,15 +130,19 @@
                 </div>
 
                 <div class="stats-grid">
-                    <div class="card">
-                        <div class="card__body">
-                            <h3>Выполнение задач</h3>
-                            <div class="progress-stats">
-                                <div class="progress-item">
-                                    <span>Средний процент выполнения:</span>
-                                    <span id="avgCompletion">0%</span>
-                                </div>
-                            </div>
+                    <div class="stat-card large">
+                        <h3>Общая статистика</h3>
+                        <div class="stat-item">
+                            <span class="stat-label">Всего игр проведено:</span>
+                            <span class="stat-value" id="totalCompletedGames">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Игр в планах:</span>
+                            <span class="stat-value" id="totalPlannedGames">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Общий прогресс подготовки:</span>
+                            <span class="stat-value" id="overallProgress">0%</span>
                         </div>
                     </div>
                 </div>
@@ -139,92 +150,134 @@
         </main>
     </div>
 
-    <!-- Модальное окно добавления игры -->
-    <div class="modal hidden" id="addGameModal">
-        <div class="modal-overlay" id="gameModalOverlay"></div>
+    <!-- Модальные окна -->
+    <!-- Модальное окно добавления/редактирования игры -->
+    <div class="modal" id="gameModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 id="gameModalTitle">Добавить новую игру</h2>
-                <button class="modal-close" id="closeGameModal">×</button>
-            </div>
-            <form id="gameForm" class="modal-body">
-                <div class="form-group">
-                    <label class="form-label">Название игры</label>
-                    <input type="text" id="gameName" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Дата</label>
-                    <input type="date" id="gameDate" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Время</label>
-                    <input type="time" id="gameTime" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Место проведения</label>
-                    <input type="text" id="gameVenue" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Статус</label>
-                    <select id="gameStatus" class="form-control">
-                        <option value="Планируется">Планируется</option>
-                        <option value="В процессе">В процессе</option>
-                        <option value="Завершена">Завершена</option>
-                    </select>
-                </div>
-            </form>
-            <div class="modal-footer">
-                <button type="button" class="btn btn--outline" id="cancelGameModal">Отмена</button>
-                <button type="submit" form="gameForm" class="btn btn--primary" id="saveGameBtn">Сохранить</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Модальное окно задач игры -->
-    <div class="modal hidden" id="gameTasksModal">
-        <div class="modal-overlay" id="tasksModalOverlay"></div>
-        <div class="modal-content modal-large">
-            <div class="modal-header">
-                <h2 id="gameTasksTitle">Задачи для игры</h2>
-                <button class="modal-close" id="closeTasksModal">×</button>
+                <h2 id="gameModalTitle">Добавить игру</h2>
+                <button class="modal-close">&times;</button>
             </div>
             <div class="modal-body">
-                <div id="gameTasksList" class="task-list">
-                    <!-- Динамически заполняется -->
-                </div>
+                <form id="gameForm">
+                    <div class="form-group">
+                        <label for="gameName">Название игры*</label>
+                        <input type="text" id="gameName" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="gameDate">Дата*</label>
+                            <input type="date" id="gameDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="gameTime">Время*</label>
+                            <input type="time" id="gameTime" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="gameVenue">Место проведения*</label>
+                        <input type="text" id="gameVenue" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="gameStatus">Статус</label>
+                        <select id="gameStatus">
+                            <option value="Планируется">Планируется</option>
+                            <option value="В процессе">В процессе</option>
+                            <option value="Завершена">Завершена</option>
+                        </select>
+                    </div>
+                </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn--outline" id="closeTasksModalBtn">Закрыть</button>
+                <button type="button" class="btn btn-secondary" id="cancelGameBtn">Отмена</button>
+                <button type="submit" form="gameForm" class="btn btn-primary" id="saveGameBtn">Сохранить</button>
             </div>
         </div>
     </div>
 
-    <!-- Модальное окно добавления задачи в шаблон -->
-    <div class="modal hidden" id="addTemplateTaskModal">
-        <div class="modal-overlay" id="templateTaskModalOverlay"></div>
+    <!-- Модальное окно задач для игры -->
+    <div class="modal" id="tasksModal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h2 id="tasksModalTitle">Задачи для игры</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="progress-bar-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="tasksProgress"></div>
+                    </div>
+                    <span class="progress-text" id="tasksProgressText">0%</span>
+                </div>
+                <div class="tasks-list" id="gameTasksList">
+                    <!-- Здесь будут задачи для конкретной игры -->
+                </div>
+                <button class="btn btn-secondary" id="addTaskBtn">
+                    <span class="btn-icon">➕</span>
+                    Добавить задачу
+                </button>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="closeTasksBtn">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно добавления задачи -->
+    <div class="modal" id="taskModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Добавить задачу в шаблон</h2>
-                <button class="modal-close" id="closeTemplateTaskModal">×</button>
+                <h2>Добавить задачу</h2>
+                <button class="modal-close">&times;</button>
             </div>
-            <form id="templateTaskForm" class="modal-body">
-                <div class="form-group">
-                    <label class="form-label">Название задачи</label>
-                    <input type="text" id="templateTaskName" class="form-control" required placeholder="Например: Подготовить подарки">
-                </div>
-            </form>
+            <div class="modal-body">
+                <form id="taskForm">
+                    <div class="form-group">
+                        <label for="taskName">Название задачи*</label>
+                        <input type="text" id="taskName" required>
+                    </div>
+                </form>
+            </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn--outline" id="cancelTemplateTaskModal">Отмена</button>
-                <button type="submit" form="templateTaskForm" class="btn btn--primary">Добавить</button>
+                <button type="button" class="btn btn-secondary" id="cancelTaskBtn">Отмена</button>
+                <button type="submit" form="taskForm" class="btn btn-primary" id="saveTaskBtn">Добавить</button>
             </div>
         </div>
     </div>
 
     <!-- Уведомления -->
-    <div id="notifications" class="notifications">
-        <!-- Динамически заполняется -->
+    <div class="notification" id="notification">
+        <div class="notification-content">
+            <span id="notificationText"></span>
+            <button class="notification-close">&times;</button>
+        </div>
     </div>
 
-    <script src="app.js"></script>
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js';
+        import { getFirestore } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js';
+
+        // Your web app's Firebase configuration
+        // ЗАМЕНИТЕ НА СВОЮ КОНФИГУРАЦИЮ ИЗ FIREBASE CONSOLE!
+        const firebaseConfig = {
+            apiKey: "AIzaSyAH3wUx1u70JILfIvBS0eYCEDsZ9npS3X4",
+            authDomain: "scincequiz-73bda.firebaseapp.com",
+            projectId: "scincequiz-73bda",
+            storageBucket: "scincequiz-73bda.firebasestorage.app",
+            messagingSenderId: "440858666248",
+            appId: "1:440858666248:web:422efcc7ee6f79dd7938bd"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Make db available globally
+        window.db = db;
+    </script>
+
+    <script src="app.js" type="module"></script>
 </body>
 </html>
