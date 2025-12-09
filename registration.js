@@ -1,396 +1,311 @@
-// Firebase Firestore functions
-import { 
-    collection, 
-    getDocs, 
-    updateDoc, 
-    doc
+// Firebase Firestore
+import {
+  collection,
+  getDocs,
+  updateDoc,
+  doc
 } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js';
 
-// Глобальные переменные
 let games = [];
 let selectedGame = null;
 
-// Инициализация приложения
-document.addEventListener('DOMContentLoaded', function() {
-    // Ждем пока Firebase инициализируется
-    setTimeout(() => {
-        if (window.db) {
-            console.log('Firebase инициализирован для регистрации');
-            initializeRegistration();
-        } else {
-            console.error('Firebase не инициализирован');
-            showNotification('Ошибка соединения с сервером', 'error');
-        }
-    }, 2000);
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    if (window.db) {
+      console.log('Firebase инициализирован для регистрации');
+      initializeRegistration();
+    } else {
+      console.error('Firebase не инициализирован');
+      showNotification('Ошибка соединения с сервером', 'error');
+    }
+  }, 500);
 });
 
 async function initializeRegistration() {
-    try {
-        console.log('Начинаем инициализацию регистрации...');
-        await loadAvailableGames();
-        setupEventListeners();
-    } catch (error) {
-        console.error('Ошибка инициализации:', error);
-        showNotification('Ошибка загрузки данных: ' + error.message, 'error');
-    }
+  try {
+    await loadAvailableGames();
+    setupEventListeners();
+  } catch (error) {
+    console.error('Ошибка инициализации:', error);
+    showNotification('Ошибка загрузки данных: ' + error.message, 'error');
+  }
 }
 
-// МАКСИМАЛЬНО УПРОЩЕННАЯ загрузка игр (БЕЗ ФИЛЬТРОВ И СОРТИРОВКИ)
+// Загрузка игр
 async function loadAvailableGames() {
-    try {
-        console.log('Загружаем игры из Firebase...');
+  try {
+    console.log('Загружаем игры из Firebase...');
+    const gamesRef = collection(window.db, 'games');
+    const snapshot = await getDocs(gamesRef);
+    console.log('Получено документов из Firebase:', snapshot.size);
 
-        // ПРОСТЕЙШИЙ запрос - получаем все документы из коллекции games
-        const gamesRef = collection(window.db, 'games');
-        const snapshot = await getDocs(gamesRef);
+    games = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-        console.log('Получено документов из Firebase:', snapshot.size);
-
-        games = [];
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        snapshot.forEach((doc) => {
-            const gameData = doc.data();
-            console.log('Обрабатываем игру:', gameData.name || 'Без названия', 'статус:', gameData.status || 'Без статуса');
-
-            // Простая фильтрация НА КЛИЕНТЕ (не в запросе к Firebase)
-            if (gameData.name && gameData.date && gameData.status) {
-                // Проверяем статус
-                if (gameData.status === 'Планируется' || gameData.status === 'В процессе') {
-                    // Проверяем дату
-                    const gameDate = new Date(gameData.date);
-                    if (gameDate >= today) {
-                        games.push({
-                            id: doc.id,
-                            ...gameData
-                        });
-                        console.log('Игра добавлена в список:', gameData.name);
-                    } else {
-                        console.log('Игра пропущена (дата в прошлом):', gameData.name, gameData.date);
-                    }
-                } else {
-                    console.log('Игра пропущена (неподходящий статус):', gameData.name, gameData.status);
-                }
-            } else {
-                console.log('Игра пропущена (нет обязательных полей):', gameData);
-            }
-        });
-
-        console.log('Итого загружено игр для регистрации:', games.length);
-
-        // Сортируем на клиенте
-        games.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-        populateGamesSelect();
-
-    } catch (error) {
-        console.error('Ошибка загрузки игр:', error);
-        console.error('Код ошибки:', error.code);
-        console.error('Сообщение ошибки:', error.message);
-
-        if (error.code === 'permission-denied') {
-            showNotification('Нет доступа к данным. Проверьте настройки Firebase.', 'error');
-        } else if (error.code === 'failed-precondition') {
-            showNotification('Ошибка настройки базы данных. Обратитесь к администратору.', 'error');
-        } else {
-            showNotification('Ошибка загрузки игр. Попробуйте позже.', 'error');
+    snapshot.forEach((d) => {
+      const gameData = d.data();
+      if (gameData.name && gameData.date && gameData.status) {
+        if (gameData.status === 'Планируется' || gameData.status === 'В процессе') {
+          const gameDate = new Date(gameData.date);
+          if (gameDate >= today) {
+            games.push({ id: d.id, ...gameData });
+          }
         }
-
-        // Показываем пустой селект с сообщением об ошибке
-        const gameSelect = document.getElementById('gameSelect');
-        gameSelect.innerHTML = '<option value="">Ошибка загрузки игр</option>';
-        gameSelect.disabled = true;
-    }
-}
-
-// Заполнение списка игр
-function populateGamesSelect() {
-    const gameSelect = document.getElementById('gameSelect');
-
-    console.log('Заполняем селект игр, доступно игр:', games.length);
-
-    if (games.length === 0) {
-        gameSelect.innerHTML = '<option value="">Нет доступных игр для регистрации</option>';
-        gameSelect.disabled = true;
-        console.log('Нет игр для отображения');
-        return;
-    }
-
-    gameSelect.innerHTML = '<option value="">Выберите игру...</option>';
-
-    games.forEach(game => {
-        const option = document.createElement('option');
-        option.value = game.id;
-        option.textContent = `${game.name} - ${formatDate(game.date)} в ${game.time}`;
-        gameSelect.appendChild(option);
-        console.log('Добавлена опция в селект:', option.textContent);
+      }
     });
 
-    gameSelect.disabled = false;
-    console.log('Селект игр успешно заполнен');
+    games.sort((a, b) => new Date(a.date) - new Date(b.date));
+    populateGamesSelect();
+  } catch (error) {
+    console.error('Ошибка загрузки игр:', error);
+    showNotification('Ошибка загрузки игр. Попробуйте позже.', 'error');
+    const gameSelect = document.getElementById('gameSelect');
+    gameSelect.innerHTML = '';
+    gameSelect.disabled = true;
+  }
 }
 
-// Обработчики событий
+function populateGamesSelect() {
+  const gameSelect = document.getElementById('gameSelect');
+  if (!gameSelect) return;
+
+  if (games.length === 0) {
+    gameSelect.innerHTML = '<option value="">Нет доступных игр</option>';
+    gameSelect.disabled = true;
+    return;
+  }
+
+  gameSelect.innerHTML = '<option value="">Выберите игру</option>';
+  games.forEach(game => {
+    const option = document.createElement('option');
+    option.value = game.id;
+    option.textContent = `${game.name} - ${formatDate(game.date)} в ${game.time}`;
+    gameSelect.appendChild(option);
+  });
+  gameSelect.disabled = false;
+}
+
 function setupEventListeners() {
-    console.log('Настраиваем обработчики событий...');
+  document.getElementById('gameSelect')
+    .addEventListener('change', handleGameSelect);
 
-    // Выбор игры
-    document.getElementById('gameSelect').addEventListener('change', handleGameSelect);
+  document.getElementById('registrationForm')
+    .addEventListener('submit', handleFormSubmit);
 
-    // Отправка формы
-    document.getElementById('registrationForm').addEventListener('submit', handleFormSubmit);
-
-    // Валидация полей
-    setupFieldValidation();
-
-    console.log('Обработчики событий настроены');
+  setupFieldValidation();
 }
 
 function handleGameSelect(e) {
-    const gameId = e.target.value;
-    const gameInfo = document.getElementById('gameInfo');
+  const gameId = e.target.value;
+  const gameInfo = document.getElementById('gameInfo');
 
-    console.log('Выбрана игра с ID:', gameId);
-
-    if (gameId) {
-        selectedGame = games.find(g => g.id === gameId);
-        if (selectedGame) {
-            console.log('Найдена информация об игре:', selectedGame.name);
-            showGameInfo(selectedGame);
-            gameInfo.classList.add('visible');
-        }
-    } else {
-        selectedGame = null;
-        gameInfo.classList.remove('visible');
+  if (gameId) {
+    selectedGame = games.find(g => g.id === gameId);
+    if (selectedGame) {
+      showGameInfo(selectedGame);
+      gameInfo.classList.add('visible');
     }
+  } else {
+    selectedGame = null;
+    gameInfo.classList.remove('visible');
+    gameInfo.innerHTML = '';
+  }
 }
 
 function showGameInfo(game) {
-    const gameInfo = document.getElementById('gameInfo');
-    const teamsCount = game.teams ? game.teams.length : 0;
-    const participantsCount = game.teams ? 
-        game.teams.reduce((sum, team) => sum + team.memberCount, 0) : 0;
+  const gameInfo = document.getElementById('gameInfo');
+  const teamsCount = game.teams ? game.teams.length : 0;
+  const participantsCount = game.teams
+    ? game.teams.reduce((sum, t) => sum + (t.memberCount || 0), 0)
+    : 0;
 
-    gameInfo.innerHTML = `
-        <h4>${game.name}</h4>
-        <p><span class="highlight">Дата и время:</span> ${formatDate(game.date)} в ${game.time}</p>
-        <p><span class="highlight">Место:</span> ${game.venue}</p>
-        <p><span class="highlight">Статус:</span> ${game.status}</p>
-        <p><span class="highlight">Уже зарегистрировано:</span> ${teamsCount} команд (${participantsCount} участников)</p>
-    `;
+  gameInfo.innerHTML =
+    `Дата и время: ${formatDate(game.date)} в ${game.time}<br>` +
+    `Место: ${game.venue}<br>` +
+    `Статус: ${game.status}<br>` +
+    `Уже зарегистрировано: ${teamsCount} команд (${participantsCount} участников)`;
 }
 
-// Валидация полей
+// Валидация
 function setupFieldValidation() {
-    const teamName = document.getElementById('teamName');
-    const memberCount = document.getElementById('memberCount');
-    const captainContact = document.getElementById('captainContact');
+  const teamName = document.getElementById('teamName');
+  const memberCount = document.getElementById('memberCount');
+  const captainContact = document.getElementById('captainContact');
 
-    teamName.addEventListener('input', validateTeamName);
-    memberCount.addEventListener('input', validateMemberCount);
-    captainContact.addEventListener('input', validateCaptainContact);
+  teamName.addEventListener('input', validateTeamName);
+  memberCount.addEventListener('input', validateMemberCount);
+  captainContact.addEventListener('input', validateCaptainContact);
 }
 
 function validateTeamName() {
-    const teamName = document.getElementById('teamName');
-    const value = teamName.value.trim();
-
-    if (value.length < 2) {
-        setFieldError(teamName, 'Название команды должно содержать минимум 2 символа');
-        return false;
+  const teamName = document.getElementById('teamName');
+  const value = teamName.value.trim();
+  if (value.length < 2) {
+    setFieldError(teamName, 'Название команды должно содержать минимум 2 символа');
+    return false;
+  }
+  if (selectedGame && selectedGame.teams) {
+    const existingTeam = selectedGame.teams.find(
+      team => team.name.toLowerCase() === value.toLowerCase()
+    );
+    if (existingTeam) {
+      setFieldError(teamName, 'Команда с таким названием уже зарегистрирована');
+      return false;
     }
-
-    if (selectedGame && selectedGame.teams) {
-        const existingTeam = selectedGame.teams.find(team => 
-            team.name.toLowerCase() === value.toLowerCase()
-        );
-        if (existingTeam) {
-            setFieldError(teamName, 'Команда с таким названием уже зарегистрирована');
-            return false;
-        }
-    }
-
-    clearFieldError(teamName);
-    return true;
+  }
+  clearFieldError(teamName);
+  return true;
 }
 
 function validateMemberCount() {
-    const memberCount = document.getElementById('memberCount');
-    const value = parseInt(memberCount.value);
-
-    if (isNaN(value) || value < 1 || value > 20) {
-        setFieldError(memberCount, 'Количество участников должно быть от 1 до 20');
-        return false;
-    }
-
-    clearFieldError(memberCount);
-    return true;
+  const memberCount = document.getElementById('memberCount');
+  const value = parseInt(memberCount.value, 10);
+  if (isNaN(value) || value < 1 || value > 20) {
+    setFieldError(memberCount, 'Количество участников должно быть от 1 до 20');
+    return false;
+  }
+  clearFieldError(memberCount);
+  return true;
 }
 
 function validateCaptainContact() {
-    const captainContact = document.getElementById('captainContact');
-    const value = captainContact.value.trim();
-
-    if (!value) {
-        setFieldError(captainContact, 'Контакт капитана обязателен');
-        return false;
-    }
-
-    // Простая проверка URL
-    try {
-        new URL(value);
-        clearFieldError(captainContact);
-        return true;
-    } catch {
-        setFieldError(captainContact, 'Введите корректную ссылку (например: https://vk.com/captain)');
-        return false;
-    }
+  const captainContact = document.getElementById('captainContact');
+  const value = captainContact.value.trim();
+  if (!value) {
+    setFieldError(captainContact, 'Контакт капитана обязателен');
+    return false;
+  }
+  try {
+    new URL(value);
+    clearFieldError(captainContact);
+    return true;
+  } catch {
+    setFieldError(captainContact, 'Введите корректную ссылку (например: https://vk.com/...)');
+    return false;
+  }
 }
 
 function setFieldError(field, message) {
-    clearFieldError(field);
-    field.style.borderColor = '#ff4d4f';
-
-    const errorDiv = document.createElement('div');
-    errorDiv.className = 'field-error';
-    errorDiv.style.color = '#ff4d4f';
-    errorDiv.style.fontSize = '12px';
-    errorDiv.style.marginTop = '4px';
-    errorDiv.textContent = message;
-
-    field.parentNode.appendChild(errorDiv);
+  clearFieldError(field);
+  field.style.borderColor = '#ff4d4f';
+  const errorDiv = document.createElement('div');
+  errorDiv.className = 'field-error';
+  errorDiv.textContent = message;
+  field.parentNode.appendChild(errorDiv);
 }
 
 function clearFieldError(field) {
-    field.style.borderColor = '#e9e9e7';
-    const existingError = field.parentNode.querySelector('.field-error');
-    if (existingError) {
-        existingError.remove();
-    }
+  field.style.borderColor = '#e9e9e7';
+  const existingError = field.parentNode.querySelector('.field-error');
+  if (existingError) existingError.remove();
 }
 
-// Обработка отправки формы
+// Отправка формы
 async function handleFormSubmit(e) {
-    e.preventDefault();
+  e.preventDefault();
+  console.log('Начинаем регистрацию команды...');
 
-    console.log('Начинаем регистрацию команды...');
+  if (!validateForm()) {
+    console.log('Форма не прошла валидацию');
+    return;
+  }
 
-    if (!validateForm()) {
-        console.log('Форма не прошла валидацию');
-        return;
-    }
+  const submitBtn = document.getElementById('submitBtn');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Регистрируем команду...';
 
-    const submitBtn = document.getElementById('submitBtn');
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Регистрируем команду...';
-
-    try {
-        await registerTeam();
-        console.log('Команда успешно зарегистрирована');
-        showSuccessMessage();
-
-    } catch (error) {
-        console.error('Ошибка регистрации команды:', error);
-        showNotification('Ошибка при регистрации команды: ' + error.message, 'error');
-
-    } finally {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '<span class="btn-icon">✅</span> Зарегистрировать команду';
-    }
+  try {
+    await registerTeam();
+    console.log('Команда успешно зарегистрирована');
+    showSuccessMessage();
+  } catch (error) {
+    console.error('Ошибка регистрации команды:', error);
+    showNotification('Ошибка при регистрации команды: ' + error.message, 'error');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Зарегистрировать команду';
+  }
 }
 
 function validateForm() {
-    if (!selectedGame) {
-        showNotification('Выберите игру для регистрации', 'error');
-        return false;
-    }
-
-    return validateTeamName() && validateMemberCount() && validateCaptainContact();
+  if (!selectedGame) {
+    showNotification('Выберите игру для регистрации', 'error');
+    return false;
+  }
+  return validateTeamName() && validateMemberCount() && validateCaptainContact();
 }
 
 async function registerTeam() {
-    console.log('Регистрируем команду для игры:', selectedGame.name);
+  console.log('Регистрируем команду для игры:', selectedGame.name);
 
-    const teamData = {
-        id: generateId(),
-        number: (selectedGame.teams ? selectedGame.teams.length : 0) + 1,
-        name: document.getElementById('teamName').value.trim(),
-        memberCount: parseInt(document.getElementById('memberCount').value),
-        captainSocialLink: document.getElementById('captainContact').value.trim(),
-        captainName: document.getElementById('captainName').value.trim() || null,
-        registeredAt: new Date(),
-        registrationSource: 'public_form'
-    };
+  const teamData = {
+    id: generateId(),
+    number: (selectedGame.teams ? selectedGame.teams.length : 0) + 1,
+    name: document.getElementById('teamName').value.trim(),
+    memberCount: parseInt(document.getElementById('memberCount').value, 10),
+    captainSocialLink: document.getElementById('captainContact').value.trim(),
+    captainName: document.getElementById('captainName').value.trim() || null,
+    registeredAt: new Date(),
+    registrationSource: 'public_form'
+  };
 
-    console.log('Данные новой команды:', teamData);
-
-    // Обновляем список команд игры
-    const updatedTeams = [...(selectedGame.teams || []), teamData];
-
-    console.log('Обновляем игру в Firebase...');
-    const gameRef = doc(window.db, 'games', selectedGame.id);
-    await updateDoc(gameRef, { teams: updatedTeams });
-
-    console.log('Команда успешно добавлена в Firebase');
+  const updatedTeams = [...(selectedGame.teams || []), teamData];
+  const gameRef = doc(window.db, 'games', selectedGame.id);
+  await updateDoc(gameRef, { teams: updatedTeams });
 }
 
 function showSuccessMessage() {
-    document.getElementById('registrationForm').classList.add('hidden');
-    document.getElementById('successMessage').classList.add('visible');
+  document.getElementById('registrationForm').classList.add('hidden');
+  document.getElementById('successMessage').classList.add('visible');
 }
 
 function resetForm() {
-    console.log('Сброс формы для новой регистрации');
-    document.getElementById('successMessage').classList.remove('visible');
-    document.getElementById('registrationForm').classList.remove('hidden');
-    document.getElementById('registrationForm').reset();
-    document.getElementById('gameInfo').classList.remove('visible');
-    selectedGame = null;
+  document.getElementById('successMessage').classList.remove('visible');
+  document.getElementById('registrationForm').classList.remove('hidden');
+  document.getElementById('registrationForm').reset();
+  document.getElementById('gameInfo').classList.remove('visible');
+  document.getElementById('gameInfo').innerHTML = '';
+  selectedGame = null;
 
-    // Очищаем ошибки
-    document.querySelectorAll('.field-error').forEach(error => error.remove());
-    document.querySelectorAll('input, select').forEach(field => {
-        field.style.borderColor = '#e9e9e7';
-    });
+  document.querySelectorAll('.field-error').forEach(e => e.remove());
+  document.querySelectorAll('input, select').forEach(f => {
+    f.style.borderColor = '#e9e9e7';
+  });
 }
 
 // Уведомления
 function showNotification(message, type = 'success') {
-    console.log('Показываем уведомление:', type, '-', message);
-
-    const notification = document.getElementById('notification');
-    const text = document.getElementById('notificationText');
-
-    text.textContent = message;
-    notification.className = `notification ${type} visible`;
-
-    setTimeout(() => {
-        notification.classList.remove('visible');
-    }, 5000);
+  const notification = document.getElementById('notification');
+  const text = document.getElementById('notificationText');
+  text.textContent = message;
+  notification.className = `notification ${type} visible`;
+  setTimeout(() => {
+    notification.classList.remove('visible');
+  }, 5000);
 }
 
 function closeNotification() {
-    document.getElementById('notification').classList.remove('visible');
+  document.getElementById('notification').classList.remove('visible');
 }
 
-// Вспомогательные функции
+// Вспомогательные
 function formatDate(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ru-RU', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-    });
+  const date = new Date(dateString);
+  return date.toLocaleDateString('ru-RU', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
 }
 
 function generateId() {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
 
-// Глобальные функции
+// Делаем функции доступными из HTML
 window.resetForm = resetForm;
 window.closeNotification = closeNotification;
 
-console.log('registration.js (упрощенная версия) загружен и готов к работе');
+console.log('registration.js загружен и готов к работе');
